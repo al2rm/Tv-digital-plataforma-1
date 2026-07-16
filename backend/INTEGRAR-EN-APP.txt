@@ -1,0 +1,7 @@
+En backend/src/app.js agrega:
+
+import adminV2Routes from "./routes/adminV2.routes.js";
+
+Antes de notFound agrega:
+
+app.use("/api/admin/v2", adminV2Routes);
