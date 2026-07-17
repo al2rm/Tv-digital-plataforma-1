@@ -1,7 +1,0 @@
-node_modules/
-.env
-dist/
-build/
-.gradle/
-.idea/
-.DS_Store
