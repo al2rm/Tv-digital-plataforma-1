@@ -2,15 +2,21 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const corsOrigins = [
+  ...(process.env.CORS_ORIGINS || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim()),
+  process.env.RENDER_EXTERNAL_URL || ""
+].filter(Boolean);
+
 export const env = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || "development",
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
-  corsOrigins: (process.env.CORS_ORIGINS || "http://localhost:5173")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  corsOrigins: [...new Set(corsOrigins)],
+  serveAdmin: process.env.SERVE_ADMIN === "true",
+  adminDistPath: process.env.ADMIN_DIST_PATH || "",
   automation: {
     workerEnabled: process.env.AUTOMATION_WORKER_ENABLED === "true",
     intervalMs: Number(process.env.AUTOMATION_WORKER_INTERVAL_MS || 60000),
@@ -26,6 +32,8 @@ export const env = {
     defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || "595"
   },
   db: {
+    connectionString: process.env.DATABASE_URL || "",
+    ssl: process.env.DB_SSL === "true",
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT || 5432),
     database: process.env.DB_NAME || "tv_digital",

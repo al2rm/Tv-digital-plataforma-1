@@ -3,13 +3,21 @@ import { env } from "../config/env.js";
 
 const { Pool } = pg;
 
-export const pool = new Pool({
-  host: env.db.host,
-  port: env.db.port,
-  database: env.db.database,
-  user: env.db.user,
-  password: env.db.password
-});
+const connectionConfig = env.db.connectionString
+  ? { connectionString: env.db.connectionString }
+  : {
+      host: env.db.host,
+      port: env.db.port,
+      database: env.db.database,
+      user: env.db.user,
+      password: env.db.password
+    };
+
+if (env.db.ssl) {
+  connectionConfig.ssl = { rejectUnauthorized: false };
+}
+
+export const pool = new Pool(connectionConfig);
 
 export const testConnection = async () => {
   const result = await pool.query("SELECT NOW()");

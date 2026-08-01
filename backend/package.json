@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
+    "test:production": "node --test smoke/production-static.smoke.js",
     "check": "node scripts/check-syntax.js",
     "db:migrate": "node src/database/migrate.js",
     "admin:create": "node scripts/create-admin.js"
