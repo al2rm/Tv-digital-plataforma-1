@@ -39,3 +39,14 @@ los flujos.
 
 Los secretos se configuran únicamente mediante archivos `.env`, que no deben
 subirse al repositorio.
+
+## Prueba gratuita en Render
+
+El archivo `render.yaml` despliega el panel y la API como un único servicio web
+y crea una base PostgreSQL gratuita. Render solicitará el correo y la clave del
+primer administrador durante la creación.
+
+> La base gratuita de Render caduca 30 días después de su creación. Este modo
+> sirve para validar el sistema, no para conservar datos reales de clientes.
+
+Consulta [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) antes de desplegar.

@@ -1,0 +1,45 @@
+databases:
+  - name: tv-digital-pro-db-demo-al2rm
+    plan: free
+    databaseName: tv_digital
+    user: tv_digital
+
+services:
+  - type: web
+    name: tv-digital-pro-demo-al2rm
+    runtime: node
+    plan: free
+    buildCommand: npm ci --prefix backend && npm ci --prefix admin && npm run build --prefix admin
+    startCommand: npm run db:migrate --prefix backend && npm run admin:create --prefix backend && npm start --prefix backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.1
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tv-digital-pro-db-demo-al2rm
+          property: connectionString
+      - key: DB_SSL
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: SERVE_ADMIN
+        value: "true"
+      - key: VITE_API_URL
+        value: /api
+      - key: WHATSAPP_MODE
+        value: assisted
+      - key: WHATSAPP_DEFAULT_COUNTRY_CODE
+        value: "595"
+      - key: AUTOMATION_WORKER_ENABLED
+        value: "false"
+      - key: ADMIN_NAME
+        value: Administrador
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

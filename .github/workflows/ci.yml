@@ -36,3 +36,21 @@ jobs:
           cache-dependency-path: admin/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  production-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            admin/package-lock.json
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix admin
+      - run: npm run build --prefix admin
+        env:
+          VITE_API_URL: /api
+      - run: npm run test:production --prefix backend
