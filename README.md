@@ -1,14 +1,41 @@
-# TV Digital Plataforma
+# TV Digital Pro
 
-Plataforma de streaming con backend, app Android y panel administrativo.
+Plataforma de administración, ventas y automatización para un servicio autorizado
+de TV digital.
 
-## Estructura
+## Módulos
 
-- backend/ API REST Node.js + Express
-- android/ App Android Kotlin + Media3
-- admin/ Panel web React
-- docs/ Documentación
+- `backend/`: API REST Node.js, Express, PostgreSQL y JWT.
+- `admin/`: panel web React + Vite adaptable a celular y escritorio.
+- `android/`: espacio reservado para la aplicación Android Kotlin + Media3.
+- `docs/`: documentación funcional y técnica.
 
-## Estado
+## Automatización híbrida
 
-Proyecto en desarrollo.
+La primera versión incluye:
+
+- CRM con embudo de leads;
+- registro de origen de marketing y anuncios de Meta;
+- consentimiento y baja de WhatsApp;
+- mensajes preparados mediante enlaces `wa.me`;
+- adaptador para WhatsApp Cloud API;
+- webhook firmado para mensajes y estados;
+- plantillas de bienvenida, planes, pago y renovación;
+- recordatorios 3 días antes, el día del vencimiento y 3 días después;
+- clientes, planes, suscripciones, pagos e indicadores;
+- panel móvil para operar el negocio.
+
+Consulta [INSTRUCCIONES.md](INSTRUCCIONES.md) para ejecutarlo y
+[docs/AUTOMATIZACION-HIBRIDA.md](docs/AUTOMATIZACION-HIBRIDA.md) para conocer
+los flujos.
+
+## Estado verificado
+
+- pruebas del backend;
+- comprobación de sintaxis;
+- migraciones ejecutadas sobre PostgreSQL compatible;
+- compilación de producción del panel;
+- revisión visual de escritorio y móvil.
+
+Los secretos se configuran únicamente mediante archivos `.env`, que no deben
+subirse al repositorio.

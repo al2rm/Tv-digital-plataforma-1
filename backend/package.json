@@ -8,7 +8,9 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/app.js"
+    "check": "node scripts/check-syntax.js",
+    "db:migrate": "node src/database/migrate.js",
+    "admin:create": "node scripts/create-admin.js"
   },
   "keywords": [
     "streaming",
@@ -29,6 +31,7 @@
     "pg": "^8.11.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
     "nodemon": "^3.1.0"
   }
 }
