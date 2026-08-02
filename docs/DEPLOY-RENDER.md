@@ -21,11 +21,22 @@ Esta configuración crea dos recursos gratuitos:
 2. Crea un Blueprint desde el repositorio
    `al2rm/Tv-digital-plataforma-1`.
 3. Confirma que Render detecta `render.yaml` en la rama `main`.
-4. En los campos secretos, escribe un correo administrativo y una contraseña
-   nueva de al menos ocho caracteres. No los guardes en GitHub.
+4. Render genera automáticamente una contraseña inicial segura y crea el
+   administrador técnico `admin@tv-digital.local`; no es necesario escribir
+   credenciales durante el despliegue.
 5. Confirma la creación y espera a que las migraciones, el administrador y el
    servidor finalicen.
 6. Abre `/api/health` y luego la raíz del dominio para validar API y panel.
+
+## Configurar el acceso administrativo personal
+
+Después de validar el despliegue, abre el servicio web en Render y entra en
+`Environment`. Sustituye `ADMIN_EMAIL` por tu correo y `ADMIN_PASSWORD` por una
+contraseña nueva de al menos ocho caracteres. Usa la opción para guardar y
+desplegar nuevamente. El comando de inicio creará o actualizará ese
+administrador sin guardar las credenciales en GitHub.
+
+No compartas la contraseña por chat ni la reutilices en otros servicios.
 
 ## Paso posterior a la prueba
 
