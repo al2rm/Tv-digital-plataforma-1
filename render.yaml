@@ -9,7 +9,7 @@ services:
     name: tv-digital-pro-demo-al2rm
     runtime: node
     plan: free
-    buildCommand: npm ci --prefix backend && npm ci --prefix admin && npm run build --prefix admin
+    buildCommand: npm ci --prefix backend && npm ci --prefix admin --include=dev && npm run build --prefix admin
     startCommand: npm run db:migrate --prefix backend && npm run admin:create --prefix backend && npm start --prefix backend
     healthCheckPath: /api/health
     envVars:

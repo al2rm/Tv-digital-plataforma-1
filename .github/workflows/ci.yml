@@ -39,6 +39,8 @@ jobs:
 
   production-smoke:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,7 +51,7 @@ jobs:
             backend/package-lock.json
             admin/package-lock.json
       - run: npm ci --prefix backend
-      - run: npm ci --prefix admin
+      - run: npm ci --prefix admin --include=dev
       - run: npm run build --prefix admin
         env:
           VITE_API_URL: /api
