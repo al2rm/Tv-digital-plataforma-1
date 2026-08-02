@@ -43,8 +43,10 @@ subirse al repositorio.
 ## Prueba gratuita en Render
 
 El archivo `render.yaml` despliega el panel y la API como un único servicio web
-y crea una base PostgreSQL gratuita. Render solicitará el correo y la clave del
-primer administrador durante la creación.
+y crea una base PostgreSQL gratuita. Render genera de forma segura la clave del
+administrador técnico inicial, por lo que el Blueprint no solicita credenciales
+durante la creación. Después de la prueba, configura tu propio correo y clave
+desde las variables de entorno privadas del servicio.
 
 > La base gratuita de Render caduca 30 días después de su creación. Este modo
 > sirve para validar el sistema, no para conservar datos reales de clientes.
