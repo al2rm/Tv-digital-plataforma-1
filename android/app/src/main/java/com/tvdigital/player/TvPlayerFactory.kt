@@ -8,7 +8,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
-@UnstableApi
+@OptIn(UnstableApi::class)
 object TvPlayerFactory {
     fun create(context: Context, session: PlaybackSession): ExoPlayer {
         val httpFactory = DefaultHttpDataSource.Factory()
