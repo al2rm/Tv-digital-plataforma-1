@@ -1,4 +1,6 @@
 import {
+  Tv,
+  Link,
   BarChart3,
   CreditCard,
   LogOut,
@@ -19,7 +21,9 @@ const navigation = [
   { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { to: "/usuarios", label: "Clientes", icon: Users },
   { to: "/suscripciones", label: "Suscripciones", icon: RefreshCw },
-  { to: "/pagos", label: "Pagos", icon: CreditCard }
+  { to: "/pagos", label: "Pagos", icon: CreditCard },
+  { to: "/catalogo", label: "Catálogo", icon: Tv },
+  { to: "/conexion", label: "App y proveedor", icon: Link }
 ];
 
 export default function AdminLayout({ children }) {

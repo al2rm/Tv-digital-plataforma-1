@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import ContentPage from "./pages/ContentPage";
+import ConnectionPage from "./pages/ConnectionPage";
 import AdminLayout from "./components/AdminLayout";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { RouterProvider, useRouter } from "./context/RouterContext";
@@ -16,7 +18,9 @@ const adminPages = {
   "/whatsapp": WhatsAppPage,
   "/usuarios": UsersPage,
   "/suscripciones": SubscriptionsPage,
-  "/pagos": PaymentsPage
+  "/pagos": PaymentsPage,
+  "/catalogo": ContentPage,
+  "/conexion": ConnectionPage
 };
 
 function Redirect({ to }) {

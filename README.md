@@ -1,54 +1,44 @@
 # TV Digital Pro
 
-Plataforma de administración, ventas y automatización para un servicio autorizado
-de TV digital.
+Plataforma propia para administrar clientes, suscripciones, pagos y una aplicación Android de TV digital.
 
-## Módulos
+## Funciones listas
 
-- `backend/`: API REST Node.js, Express, PostgreSQL y JWT.
-- `admin/`: panel web React + Vite adaptable a celular y escritorio.
-- `android/`: espacio reservado para la aplicación Android Kotlin + Media3.
-- `docs/`: documentación funcional y técnica.
+- panel React adaptable a celular y escritorio;
+- clientes, accesos, precios, suscripciones, pagos y renovaciones;
+- CRM, avisos por WhatsApp y automatizaciones de vencimiento;
+- catálogo administrable de categorías, canales y películas;
+- app Android para teléfono y Android TV con inicio de sesión, catálogo, búsqueda, favoritos y Media3;
+- reproducción HLS/DASH y Widevine mediante fuentes HTTPS autorizadas;
+- bloqueo de reproducción cuando la cuenta está desactivada o la suscripción está vencida;
+- compilación automática de la APK de prueba con GitHub Actions.
 
-## Automatización híbrida
+## Estructura
 
-La primera versión incluye:
+- `backend/`: API Node.js, Express, PostgreSQL y JWT.
+- `admin/`: panel React + Vite.
+- `android/`: aplicación Kotlin + Media3.
+- `docs/`: instalación, despliegue y automatización.
 
-- CRM con embudo de leads;
-- registro de origen de marketing y anuncios de Meta;
-- consentimiento y baja de WhatsApp;
-- mensajes preparados mediante enlaces `wa.me`;
-- adaptador para WhatsApp Cloud API;
-- webhook firmado para mensajes y estados;
-- plantillas de bienvenida, planes, pago y renovación;
-- recordatorios 3 días antes, el día del vencimiento y 3 días después;
-- clientes, planes, suscripciones, pagos e indicadores;
-- panel móvil para operar el negocio.
+## Flujo de uso
 
-Consulta [INSTRUCCIONES.md](INSTRUCCIONES.md) para ejecutarlo y
-[docs/AUTOMATIZACION-HIBRIDA.md](docs/AUTOMATIZACION-HIBRIDA.md) para conocer
-los flujos.
+1. Despliega el panel y la API siguiendo [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md).
+2. En el panel, configura precios, clientes y suscripciones.
+3. Agrega fuentes HTTPS autorizadas desde **Catálogo**.
+4. Descarga la APK del resultado del flujo **Compilar app Android** en GitHub Actions.
+5. En la app, escribe la dirección HTTPS de tu servidor e inicia sesión con un cliente del panel.
 
-## Estado verificado
+## LumixTV
 
-- pruebas del backend;
-- comprobación de sintaxis;
-- migraciones ejecutadas sobre PostgreSQL compatible;
-- compilación de producción del panel;
-- revisión visual de escritorio y móvil.
+La cuenta de revendedor se gestiona actualmente desde el panel de LumixTV. La sincronización automática requiere documentación oficial de su API y un contrato autorizado de reproducción. No guardes credenciales del panel del proveedor dentro de la app ni del repositorio.
 
-Los secretos se configuran únicamente mediante archivos `.env`, que no deben
-subirse al repositorio.
+## Verificación
 
-## Prueba gratuita en Render
+```bash
+npm ci --prefix backend
+npm test --prefix backend
+npm ci --prefix admin
+npm run build --prefix admin
+```
 
-El archivo `render.yaml` despliega el panel y la API como un único servicio web
-y crea una base PostgreSQL gratuita. Render genera de forma segura la clave del
-administrador técnico inicial, por lo que el Blueprint no solicita credenciales
-durante la creación. Después de la prueba, configura tu propio correo y clave
-desde las variables de entorno privadas del servicio.
-
-> La base gratuita de Render caduca 30 días después de su creación. Este modo
-> sirve para validar el sistema, no para conservar datos reales de clientes.
-
-Consulta [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md) antes de desplegar.
+Los secretos se configuran únicamente mediante variables de entorno y nunca se suben al repositorio.

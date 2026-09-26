@@ -1383,3 +1383,10 @@ tbody tr:last-child td {
     width: 100%;
   }
 }
+
+.connection-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-bottom:24px;}
+.connection-grid h2 {margin-top:18px;}
+.connection-grid p,.catalog-note {color:var(--muted);line-height:1.65;font-size:13px;margin-top:18px;}
+.plan-price-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;}
+.plan-price-grid form {display:grid;gap:12px;}
+@media(max-width:800px){.connection-grid,.plan-price-grid{grid-template-columns:1fr;}}

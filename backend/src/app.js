@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { env } from "./config/env.js";
+import playerRoutes from "./routes/player.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import adminV2Routes from "./routes/adminV2.routes.js";
 import crmRoutes from "./routes/crm.routes.js";
@@ -62,6 +63,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin/v2", adminV2Routes);
 app.use("/api/crm", crmRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api", playerRoutes);
 
 if (env.serveAdmin) {
   app.use(express.static(adminDistPath));

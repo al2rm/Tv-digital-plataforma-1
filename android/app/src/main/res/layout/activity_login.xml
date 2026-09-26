@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:background="#050816">
+<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="28dp" android:orientation="vertical" android:gravity="center_vertical">
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="TV DIGITAL PRO" android:textColor="#38BDF8" android:textStyle="bold" android:textSize="16sp"/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Tu entretenimiento,\nen un solo lugar." android:textColor="#FFFFFF" android:textSize="30sp" android:textStyle="bold"/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Ingresa con la cuenta creada en tu panel TV Digital Pro." android:textColor="#94A3B8"/>
+<EditText android:id="@+id/serverInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:hint="Servidor: https://tu-dominio.com/" android:inputType="textUri" android:singleLine="true" android:textColor="#FFFFFF" android:textColorHint="#94A3B8"/>
+<EditText android:id="@+id/emailInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Correo electrónico" android:inputType="textEmailAddress" android:singleLine="true" android:saveEnabled="false" android:textColor="#FFFFFF" android:textColorHint="#94A3B8"/>
+<EditText android:id="@+id/passwordInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Contraseña" android:inputType="textPassword" android:singleLine="true" android:saveEnabled="false" android:textColor="#FFFFFF" android:textColorHint="#94A3B8"/>
+<Button android:id="@+id/loginButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="Entrar"/>
+<TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:accessibilityLiveRegion="polite" android:textColor="#FCA5A5"/>
+<Button android:id="@+id/demoButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Probar reproductor con video demo"/>
+</LinearLayout></ScrollView>

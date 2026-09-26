@@ -4,12 +4,14 @@ import { adminMiddleware } from "../middlewares/adminMiddleware.js";
 import { listUsers, createUser, updateUser } from "../controllers/adminUsers.controller.js";
 import {
   createSubscription,
+  createPayment,
+  updatePlan,
   listPlans,
   listPayments,
   listSubscriptions,
   renewSubscription
 } from "../controllers/adminPayments.controller.js";
-import { listContent, createContent, disableContent } from "../controllers/adminContent.controller.js";
+import { listContent, createContent, updateContent, disableContent } from "../controllers/adminContent.controller.js";
 import {
   listAutomationJobs,
   runAutomations
@@ -21,6 +23,8 @@ router.get("/users", listUsers);
 router.post("/users", createUser);
 router.put("/users/:id", updateUser);
 router.get("/payments", listPayments);
+router.post("/payments", createPayment);
+router.put("/plans/:id", updatePlan);
 router.get("/subscriptions", listSubscriptions);
 router.get("/plans", listPlans);
 router.post("/subscriptions", createSubscription);
@@ -29,5 +33,6 @@ router.get("/automations/jobs", listAutomationJobs);
 router.post("/automations/run", runAutomations);
 router.get("/content/:kind", listContent);
 router.post("/content/:kind", createContent);
+router.put("/content/:kind/:id", updateContent);
 router.delete("/content/:kind/:id", disableContent);
 export default router;
