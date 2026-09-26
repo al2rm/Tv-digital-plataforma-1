@@ -3,10 +3,12 @@ package com.tvdigital.player
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
+@UnstableApi
 object TvPlayerFactory {
     fun create(context: Context, session: PlaybackSession): ExoPlayer {
         val httpFactory = DefaultHttpDataSource.Factory()
