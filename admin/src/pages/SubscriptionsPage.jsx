@@ -14,6 +14,7 @@ const formatDate = (value) => {
 };
 
 export default function SubscriptionsPage() {
+  const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState([]);
   const [users, setUsers] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -55,6 +56,7 @@ export default function SubscriptionsPage() {
 
   const createSubscription = async (event) => {
     event.preventDefault();
+    setSaving(true);
     try {
       const response = await api.post("/admin/v2/subscriptions", createForm);
       const reminders = response.data.data.reminders?.length || 0;
@@ -67,11 +69,12 @@ export default function SubscriptionsPage() {
       await load();
     } catch (createError) {
       setError(apiError(createError, "No se pudo crear la suscripción"));
-    }
+    } finally { setSaving(false); }
   };
 
   const renew = async (event) => {
     event.preventDefault();
+    setSaving(true);
     try {
       const response = await api.post(
         `/admin/v2/subscriptions/${renewing.id}/renew`,
@@ -87,7 +90,7 @@ export default function SubscriptionsPage() {
       await load();
     } catch (renewError) {
       setError(apiError(renewError, "No se pudo renovar"));
-    }
+    } finally { setSaving(false); }
   };
 
   return (
@@ -203,7 +206,7 @@ export default function SubscriptionsPage() {
               <button type="button" className="secondary-button" onClick={() => setCreateOpen(false)}>
                 Cancelar
               </button>
-              <button className="primary-button">Crear suscripción</button>
+              <button className="primary-button" disabled={saving}>Crear suscripción</button>
             </div>
           </form>
         </Modal>
@@ -246,7 +249,7 @@ export default function SubscriptionsPage() {
               <button type="button" className="secondary-button" onClick={() => setRenewing(null)}>
                 Cancelar
               </button>
-              <button className="primary-button">Confirmar renovación</button>
+              <button className="primary-button" disabled={saving}>Confirmar renovación</button>
             </div>
           </form>
         </Modal>

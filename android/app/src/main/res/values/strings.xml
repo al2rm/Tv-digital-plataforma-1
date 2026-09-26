@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">TV Digital Pro</string>
+    <string name="player_title">TV Digital Player</string>
+    <string name="player_ready">Listo para solicitar una sesión autorizada.</string>
+    <string name="content_id_hint">ID del contenido</string>
+    <string name="token_hint">Token del usuario</string>
+    <string name="play_content">Reintentar</string>
+    <string name="play_demo">Probar video demo</string>
+    <string name="catalog_title">TV Digital Pro</string>
+    <string name="catalog_subtitle">Canales disponibles</string>
+    <string name="search_hint">Buscar canales o películas</string>
+    <string name="search_button">Buscar</string>
+    <string name="demo_backend_button">Probar conexión demo</string>
+    <string name="access_token_hint">Token temporal o de usuario</string>
+    <string name="all_categories">Todas las categorías</string>
+    <string name="loading_catalog">Cargando catálogo…</string>
+    <string name="empty_catalog">No encontramos contenido. Prueba otros filtros o consulta al administrador.</string>
+</resources>

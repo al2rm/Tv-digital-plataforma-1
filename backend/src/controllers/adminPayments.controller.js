@@ -82,8 +82,15 @@ export const createSubscription = async (req, res, next) => {
 };
 
 export const renewSubscription = async (req, res, next) => {
+  let client;
   try {
-    const result = await pool.query(
+    const amount = Number(req.body.monto || 0);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 999999999999) {
+      return res.status(400).json({ok:false,message:"Monto inválido"});
+    }
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE subscriptions s SET
          estado = 'activa',
          fecha_inicio = GREATEST(s.fecha_fin, CURRENT_DATE),
@@ -99,15 +106,13 @@ export const renewSubscription = async (req, res, next) => {
       [req.params.id]
     );
     if (!result.rowCount) {
-      return res.status(404).json({
-        ok: false,
-        message: "Suscripción no encontrada"
-      });
+      await client.query("ROLLBACK");
+      return res.status(404).json({ok:false,message:"Suscripción no encontrada"});
     }
     const subscription = result.rows[0];
 
-    if (Number(req.body.monto) > 0) {
-      await pool.query(
+    if (amount > 0) {
+      await client.query(
         `INSERT INTO payments(
            user_id, subscription_id, monto, moneda, metodo,
            estado, referencia, nota
@@ -125,7 +130,12 @@ export const renewSubscription = async (req, res, next) => {
       );
     }
 
-    const reminders = await scheduleSubscriptionReminders(subscription.id);
+    await client.query("COMMIT");
+    client.release();
+    client = null;
+    let reminders = [];
+    try { reminders = await scheduleSubscriptionReminders(subscription.id); }
+    catch { /* La renovación ya está confirmada; un aviso fallido no debe duplicarla. */ }
     let confirmation = null;
     try {
       const queued = await queueOutboundMessage({
@@ -154,6 +164,28 @@ export const renewSubscription = async (req, res, next) => {
       data: { subscription, reminders, confirmation }
     });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     return next(error);
-  }
+  } finally { client?.release(); }
+};
+
+export const createPayment = async (req,res,next) => {
+ try {
+  const amount=Number(req.body.monto), userId=Number(req.body.userId);
+  if(!Number.isSafeInteger(userId)||userId<=0||!Number.isFinite(amount)||amount<=0||amount>999999999999) return res.status(400).json({ok:false,message:"Cliente y monto válido son obligatorios"});
+  const result=await pool.query(`INSERT INTO payments(user_id,monto,moneda,metodo,referencia,nota)
+   SELECT id,$2,'PYG',$3,$4,$5 FROM users WHERE id=$1 RETURNING *`,
+   [userId,amount,String(req.body.metodo||'manual').slice(0,40),String(req.body.referencia||'').slice(0,160),String(req.body.nota||'').slice(0,2000)]);
+  if(!result.rowCount)return res.status(404).json({ok:false,message:"Cliente no encontrado"});
+  res.status(201).json({ok:true,data:result.rows[0]});
+ }catch(e){next(e);}
+};
+export const updatePlan = async(req,res,next)=>{
+ try {
+  const price=Number(req.body.precio);
+  if(!Number.isFinite(price)||price<0||price>999999999999)return res.status(400).json({ok:false,message:"Precio inválido"});
+  const result=await pool.query('UPDATE plans SET precio=$1,fecha_actualizacion=NOW() WHERE id=$2 RETURNING *',[price,req.params.id]);
+  if(!result.rowCount)return res.status(404).json({ok:false,message:"Plan no encontrado"});
+  res.json({ok:true,data:result.rows[0]});
+ }catch(e){next(e);}
 };

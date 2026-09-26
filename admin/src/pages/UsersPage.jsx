@@ -1,4 +1,4 @@
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Pencil } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
@@ -19,6 +19,7 @@ export default function UsersPage() {
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -41,15 +42,17 @@ export default function UsersPage() {
 
   const save = async (event) => {
     event.preventDefault();
+    setSaving(true);
     try {
-      await api.post("/admin/v2/users", form);
+      if (form.id) await api.put(`/admin/v2/users/${form.id}`, form);
+      else await api.post("/admin/v2/users", form);
       setOpen(false);
       setForm(emptyForm);
-      setNotice("Cliente creado correctamente.");
+      setNotice("Cliente guardado correctamente.");
       await load();
     } catch (saveError) {
       setError(apiError(saveError, "No se pudo guardar"));
-    }
+    } finally { setSaving(false); }
   };
 
   const toggleConsent = async (user) => {
@@ -70,7 +73,7 @@ export default function UsersPage() {
         title="Clientes y accesos"
         description="Usuarios, datos de contacto y consentimiento de WhatsApp."
         action={
-          <button type="button" className="primary-button" onClick={() => setOpen(true)}>
+          <button type="button" className="primary-button" onClick={() => { setForm(emptyForm); setError(""); setOpen(true); }}>
             <Plus size={18} />
             Nuevo cliente
           </button>
@@ -140,16 +143,18 @@ export default function UsersPage() {
             }
           ]}
           actions={(user) => (
+            <div className="button-row"><button className="mini-button" onClick={() => { setForm({...emptyForm,...user,consentimientoWhatsapp:Boolean(user.whatsapp_opt_in_at)}); setError(""); setOpen(true); }}><Pencil size={15}/>Editar</button>
             <button type="button" className="mini-button" onClick={() => toggleConsent(user)}>
               {user.whatsapp_opt_in_at ? "Quitar permiso" : "Registrar permiso"}
-            </button>
+            </button></div>
           )}
         />
       </section>
 
       {open ? (
-        <Modal title="Nuevo cliente" onClose={() => setOpen(false)}>
+        <Modal title={form.id ? "Editar cliente" : "Nuevo cliente"} onClose={() => !saving && setOpen(false)}>
           <form className="form-grid" onSubmit={save}>
+            {error && <div className="alert alert--error form-grid__full">{error}</div>}
             <label>
               Nombre *
               <input
@@ -162,12 +167,13 @@ export default function UsersPage() {
               Correo *
               <input
                 type="email"
+                disabled={Boolean(form.id)}
                 value={form.email}
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
                 required
               />
             </label>
-            <label>
+            {!form.id && <label>
               Contraseña temporal *
               <input
                 type="password"
@@ -176,7 +182,7 @@ export default function UsersPage() {
                 onChange={(event) => setForm({ ...form, password: event.target.value })}
                 required
               />
-            </label>
+            </label>}
             <label>
               WhatsApp
               <input
@@ -223,7 +229,7 @@ export default function UsersPage() {
               <button type="button" className="secondary-button" onClick={() => setOpen(false)}>
                 Cancelar
               </button>
-              <button className="primary-button">Guardar cliente</button>
+              <button className="primary-button" disabled={saving}>{saving ? "Guardando…" : "Guardar cliente"}</button>
             </div>
           </form>
         </Modal>
