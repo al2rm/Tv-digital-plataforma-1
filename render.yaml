@@ -1,9 +1,3 @@
-databases:
-  - name: tv-digital-pro-db-demo-al2rm
-    plan: free
-    databaseName: tv_digital
-    user: tv_digital
-
 services:
   - type: web
     name: tv-digital-pro-demo-al2rm
@@ -18,9 +12,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: tv-digital-pro-db-demo-al2rm
-          property: connectionString
+        sync: false
       - key: DB_SSL
         value: "false"
       - key: JWT_SECRET
