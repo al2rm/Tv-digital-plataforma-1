@@ -2,10 +2,22 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
-export const IPTV_ORG_PARAGUAY_URL = "https://iptv-org.github.io/iptv/countries/py.m3u";
-export const IPTV_ORG_SOURCE = "iptv-org-py";
+export const IPTV_ORG_COUNTRIES_URL = "https://iptv-org.github.io/api/countries.json";
+export const IPTV_ORG_COUNTRY_BASE_URL = "https://iptv-org.github.io/iptv/countries";
+export const IPTV_ORG_PARAGUAY_URL = `${IPTV_ORG_COUNTRY_BASE_URL}/py.m3u`;
 
 const fail = (message, statusCode = 502) => Object.assign(new Error(message), { statusCode });
+
+export const normalizeCountryCode = (value) => {
+  const code = String(value || "").trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(code)) throw fail("El país seleccionado no es válido", 400);
+  return code;
+};
+
+export const countryPlaylistUrl = (countryCode) =>
+  `${IPTV_ORG_COUNTRY_BASE_URL}/${normalizeCountryCode(countryCode)}.m3u`;
+
+export const countrySource = (countryCode) => `iptv-org-${normalizeCountryCode(countryCode)}`;
 
 const parseAttributes = (line) => {
   const attributes = {};
@@ -43,7 +55,7 @@ export const parseM3u = (text) => {
         tvgId: String(attributes["tvg-id"] || "").trim(),
         name: String(comma >= 0 ? line.slice(comma + 1) : attributes["tvg-name"] || "Canal sin nombre").trim(),
         logoUrl: httpsUrl(attributes["tvg-logo"] || ""),
-        group: String(attributes["group-title"] || "Paraguay").trim() || "Paraguay",
+        group: String(attributes["group-title"] || "Sin categoría").trim() || "Sin categoría",
         headers: {}
       };
       continue;
@@ -85,22 +97,50 @@ const readLimitedText = async (response, maxBytes) => {
   return buffer.toString("utf8");
 };
 
-export const loadParaguayPlaylist = async ({ fetchImpl = fetch } = {}) => {
+const fetchLimitedText = async (url, maxBytes, { fetchImpl = fetch, accept = "text/plain" } = {}) => {
   let response;
   try {
-    response = await fetchImpl(IPTV_ORG_PARAGUAY_URL, {
-      headers: { Accept: "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain" },
+    response = await fetchImpl(url, {
+      headers: { Accept: accept },
       redirect: "follow",
       signal: AbortSignal.timeout(12000)
     });
   } catch {
-    throw fail("No se pudo descargar la lista de Paraguay desde iptv-org");
+    throw fail("No se pudo descargar la información desde iptv-org");
   }
   if (!response.ok) throw fail(`iptv-org respondió con estado ${response.status}`);
-  const text = await readLimitedText(response, 2 * 1024 * 1024);
+  return readLimitedText(response, maxBytes);
+};
+
+export const loadCountryCatalog = async ({ fetchImpl = fetch } = {}) => {
+  const text = await fetchLimitedText(IPTV_ORG_COUNTRIES_URL, 1024 * 1024, {
+    fetchImpl,
+    accept: "application/json"
+  });
+  let data;
+  try { data = JSON.parse(text); } catch { throw fail("iptv-org devolvió un catálogo de países inválido"); }
+  if (!Array.isArray(data)) throw fail("iptv-org devolvió un catálogo de países inválido");
+  const displayNames = new Intl.DisplayNames(["es"], { type: "region" });
+  return data
+    .filter((country) => country && /^[A-Z]{2}$/.test(country.code || ""))
+    .map((country) => ({
+      code: country.code.toLowerCase(),
+      name: displayNames.of(country.code) || country.name || country.code,
+      flag: typeof country.flag === "string" ? country.flag : ""
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+};
+
+export const loadCountryPlaylist = async (countryCode, { fetchImpl = fetch } = {}) => {
+  const text = await fetchLimitedText(countryPlaylistUrl(countryCode), 5 * 1024 * 1024, {
+    fetchImpl,
+    accept: "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain"
+  });
   if (!text.trimStart().startsWith("#EXTM3U")) throw fail("iptv-org devolvió una lista M3U inválida");
   return parseM3u(text);
 };
+
+export const loadParaguayPlaylist = (options) => loadCountryPlaylist("py", options);
 
 const isPrivateIpv4 = (address) => {
   const [a, b] = address.split(".").map(Number);

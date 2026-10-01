@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertPublicChannelUrl,
+  countryPlaylistUrl,
+  loadCountryCatalog,
+  normalizeCountryCode,
   parseM3u,
   probeChannel
 } from "../src/services/iptvOrg.service.js";
@@ -25,6 +28,24 @@ test("interpreta canales, metadatos y cabeceras permitidas de una lista M3U", ()
   });
   assert.match(channels[0].sourceId, /^[a-f0-9]{32}$/);
   assert.equal(channels[1].compatible, false);
+});
+
+test("construye únicamente rutas de países válidas", () => {
+  assert.equal(normalizeCountryCode("AR"), "ar");
+  assert.equal(countryPlaylistUrl("BR"), "https://iptv-org.github.io/iptv/countries/br.m3u");
+  assert.throws(() => countryPlaylistUrl("../../admin"), /país seleccionado/);
+});
+
+test("carga y traduce el catálogo de países de iptv-org", async () => {
+  const countries = await loadCountryCatalog({
+    fetchImpl: async () => new Response(JSON.stringify([
+      { name: "Paraguay", code: "PY", flag: "🇵🇾" },
+      { name: "Argentina", code: "AR", flag: "🇦🇷" },
+      { name: "Invalid", code: "BAD" }
+    ]), { status: 200, headers: { "Content-Type": "application/json" } })
+  });
+  assert.deepEqual(countries.map(({ code }) => code).sort(), ["ar", "py"]);
+  assert.equal(countries.find(({ code }) => code === "py").name, "Paraguay");
 });
 
 test("bloquea destinos privados y permite un host público resuelto", async () => {
