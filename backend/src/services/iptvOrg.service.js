@@ -89,11 +89,11 @@ export const parseM3u = (text) => {
   return channels;
 };
 
-const readLimitedText = async (response, maxBytes) => {
+const readLimitedText = async (response, maxBytes, oversizeMessage = "La lista de IPTV supera el tamaño permitido") => {
   const contentLength = Number(response.headers.get("content-length") || 0);
-  if (contentLength > maxBytes) throw fail("La lista de IPTV supera el tamaño permitido");
+  if (contentLength > maxBytes) throw fail(oversizeMessage);
   const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length > maxBytes) throw fail("La lista de IPTV supera el tamaño permitido");
+  if (buffer.length > maxBytes) throw fail(oversizeMessage);
   return buffer.toString("utf8");
 };
 
@@ -183,30 +183,65 @@ const closeBody = async (response) => {
   try { await response.body?.cancel(); } catch { /* cuerpo ya cerrado */ }
 };
 
+const redirectStatus = (status) => [301, 302, 303, 307, 308].includes(status);
+
+const fetchChannelManifest = async (channel, { fetchImpl, lookupImpl }) => {
+  let url = await assertPublicChannelUrl(channel.manifestUrl, { lookupImpl });
+  for (let redirects = 0; redirects <= 3; redirects += 1) {
+    const response = await fetchImpl(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, audio/mpegurl, text/plain;q=0.8, */*;q=0.1",
+        Range: "bytes=0-131071",
+        ...channel.headers
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(7000)
+    });
+    if (!redirectStatus(response.status)) return { response, url };
+    const location = response.headers.get("location");
+    await closeBody(response);
+    if (!location) throw fail("La fuente redirigió sin indicar un destino", 400);
+    if (redirects === 3) throw fail("La fuente realizó demasiadas redirecciones", 400);
+    url = await assertPublicChannelUrl(new URL(location, url).href, { lookupImpl });
+  }
+  throw fail("La fuente realizó demasiadas redirecciones", 400);
+};
+
+const validateHlsManifest = (text, manifestUrl) => {
+  const normalized = String(text || "").replace(/\r/g, "").trim();
+  if (!normalized.startsWith("#EXTM3U")) return "La respuesta no es un manifiesto HLS válido";
+
+  const references = normalized.split("\n")
+    .map((line) => line.trim())
+    .flatMap((line) => {
+      if (!line) return [];
+      if (!line.startsWith("#")) return [line];
+      return [...line.matchAll(/URI="([^"]+)"/g)].map((match) => match[1]);
+    });
+  if (!references.length) return "El manifiesto HLS no contiene variantes ni segmentos";
+
+  for (const reference of references) {
+    try {
+      if (new URL(reference, manifestUrl).protocol !== "https:") {
+        return "El manifiesto referencia contenido sin HTTPS";
+      }
+    } catch {
+      return "El manifiesto HLS contiene una referencia inválida";
+    }
+  }
+  return null;
+};
+
 export const probeChannel = async (channel, { fetchImpl = fetch, lookupImpl = lookup } = {}) => {
   try {
-    const url = await assertPublicChannelUrl(channel.manifestUrl, { lookupImpl });
-    const headers = { ...channel.headers };
-    let response = await fetchImpl(url, {
-      method: "HEAD",
-      headers,
-      redirect: "follow",
-      signal: AbortSignal.timeout(5000)
-    });
-    await closeBody(response);
-    if ([403, 405, 501].includes(response.status)) {
-      response = await fetchImpl(url, {
-        method: "GET",
-        headers: { ...headers, Range: "bytes=0-0" },
-        redirect: "follow",
-        signal: AbortSignal.timeout(5000)
-      });
-      await closeBody(response);
-    }
+    const { response, url } = await fetchChannelManifest(channel, { fetchImpl, lookupImpl });
     if (!response.ok) return { available: false, reason: `La fuente respondió ${response.status}` };
-    return { available: true };
+    const text = await readLimitedText(response, 128 * 1024, "El manifiesto supera el tamaño permitido");
+    const reason = validateHlsManifest(text, url);
+    return reason ? { available: false, reason } : { available: true };
   } catch (error) {
-    return { available: false, reason: error.statusCode === 400 ? error.message : "La fuente no respondió a tiempo" };
+    return { available: false, reason: error.statusCode ? error.message : "La fuente no respondió a tiempo" };
   }
 };
 
