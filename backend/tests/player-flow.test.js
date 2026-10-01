@@ -33,6 +33,26 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   client=(await request('/auth/login',{method:'POST',body:{email:user.email,password}})).data.token;
   assert.ok(client);
  });
+ await t.test('el admin previsualiza e importa Paraguay con cabeceras de reproducción',async()=>{
+  const originalFetch=globalThis.fetch;
+  const playlist=`#EXTM3U\n#EXTINF:-1 tvg-id="NPY.py",NPY prueba\n#EXTVLCOPT:http-referrer=https://www.npy.com.py/\nhttps://8.8.8.8/npy/playlist.m3u8`;
+  globalThis.fetch=async(input,options={})=>{
+   const target=String(input);
+   if(target==='https://iptv-org.github.io/iptv/countries/py.m3u')return new Response(playlist,{status:200,headers:{'Content-Type':'audio/x-mpegurl'}});
+   if(target==='https://8.8.8.8/npy/playlist.m3u8')return new Response(null,{status:200});
+   return originalFetch(input,options);
+  };
+  try{
+   const preview=await request('/admin/v2/content/import/iptv-org/paraguay/preview',{token:admin});
+   assert.equal(preview.status,200);assert.equal(preview.data.summary.importable,1);
+   const imported=await request('/admin/v2/content/import/iptv-org/paraguay',{method:'POST',token:admin,body:{sourceIds:[preview.data.items[0].sourceId]}});
+   assert.equal(imported.status,201);assert.equal(imported.data.imported.length,1);
+   const session=await request(`/playback/session/channel:${imported.data.imported[0].id}`,{token:admin});
+   assert.equal(session.status,200);assert.equal(session.data.streamHeaders.Referer,'https://www.npy.com.py/');
+   const repeated=await request('/admin/v2/content/import/iptv-org/paraguay/preview',{token:admin});
+   assert.equal(repeated.data.summary.existing,1);
+  }finally{globalThis.fetch=originalFetch;}
+ });
  await t.test('el cliente no puede administrar ni ver fuentes en el catálogo',async()=>{
   assert.equal((await request('/admin/v2/users',{token:client})).status,403);
   category=(await request('/admin/v2/content/categories',{method:'POST',token:admin,body:{nombre:'Pruebas',slug:'pruebas'}})).data;
@@ -56,7 +76,7 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,404);
   await request(`/admin/v2/content/live_channels/${content.id}`,{method:'PUT',token:admin,body:{nombre:'Canal actualizado',activo:true}});
   await request(`/admin/v2/content/categories/${category.id}`,{method:'PUT',token:admin,body:{nombre:'Pruebas',slug:'pruebas',activo:false}});
-  assert.equal((await request('/catalog/channels',{token:client})).data.items.length,0);
+  assert.equal((await request('/catalog/channels',{token:client})).data.items.some(item=>item.groupId===`channel:${content.id}`),false);
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,404);
   await request(`/admin/v2/content/categories/${category.id}`,{method:'PUT',token:admin,body:{nombre:'Pruebas',slug:'pruebas',activo:true}});
  });
