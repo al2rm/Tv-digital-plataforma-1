@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Pencil, Tv, Film, Layers } from 'lucide-react';
+import { Download, Film, Layers, Pencil, Plus, Tv } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
@@ -8,6 +8,7 @@ const kinds={live_channels:'TV en vivo',movies:'Películas',categories:'Categor�
 const blank={nombre:'',titulo:'',category_id:'',manifest_url:'',license_url:'',drm_type:'none',logo_url:'',poster_url:'',slug:'',tipo:'general',activo:true};
 export default function ContentPage(){
  const [kind,setKind]=useState('live_channels'),[rows,setRows]=useState([]),[categories,setCategories]=useState([]),[form,setForm]=useState(null),[error,setError]=useState(''),[saving,setSaving]=useState(false),[notice,setNotice]=useState('');
+ const [importer,setImporter]=useState(null),[selected,setSelected]=useState(new Set()),[importing,setImporting]=useState(false),[importError,setImportError]=useState('');
  const load=useCallback(async()=>{try{const [r,c]=await Promise.all([api.get(`/admin/v2/content/${kind}`),api.get('/admin/v2/content/categories')]);setRows(r.data.data);setCategories(c.data.data);}catch(e){setError(apiError(e));}},[kind]);
  useEffect(()=>{setRows([]);setError('');void load();},[load]);
  const change=(key,value)=>setForm({...form,[key]:value});
@@ -16,9 +17,21 @@ export default function ContentPage(){
   if(form.id)await api.put(`/admin/v2/content/${kind}/${form.id}`,data);else await api.post(`/admin/v2/content/${kind}`,data);
   setForm(null);setNotice('Catálogo actualizado. Los cambios ya están disponibles para la app.');await load();
  }catch(err){setError(apiError(err));}finally{setSaving(false);}};
+ const openImporter=async()=>{setImporter({loading:true,items:[],summary:null,source:null});setSelected(new Set());setImportError('');try{
+  const response=await api.get('/admin/v2/content/import/iptv-org/paraguay/preview');
+  const data=response.data.data;setImporter({...data,loading:false});
+  setSelected(new Set(data.items.filter(item=>item.compatible&&!item.existing).map(item=>item.sourceId)));
+ }catch(err){setImporter(current=>({...current,loading:false}));setImportError(apiError(err));}};
+ const toggleChannel=sourceId=>setSelected(current=>{const next=new Set(current);if(next.has(sourceId))next.delete(sourceId);else next.add(sourceId);return next;});
+ const importChannels=async()=>{setImporting(true);setImportError('');try{
+  const response=await api.post('/admin/v2/content/import/iptv-org/paraguay',{sourceIds:[...selected]},{timeout:90000});
+  const result=response.data.data;const unavailable=result.unavailable.length;
+  setNotice(`${result.imported.length} canal${result.imported.length===1?'':'es'} importado${result.imported.length===1?'':'s'}${unavailable?`; ${unavailable} fuente${unavailable===1?' no respondió':'s no respondieron'}`:''}.`);
+  setImporter(null);setSelected(new Set());await load();
+ }catch(err){setImportError(apiError(err));}finally{setImporting(false);}};
  return <><PageHeader eyebrow="App Android" title="Tu catálogo" description="Administra las categorías, canales y películas que verán tus clientes." action={<button className="primary-button" onClick={()=>{setError('');setForm({...blank});}}><Plus size={18}/>Agregar</button>}/>
  {notice&&<div className="alert alert--success">{notice}</div>}{error&&!form&&<div className="alert alert--error">{error}</div>}
- <div className="toolbar">{Object.entries(kinds).map(([key,title])=><button key={key} className={kind===key?'primary-button':'secondary-button'} onClick={()=>setKind(key)}>{key==='live_channels'?<Tv size={18}/>:key==='movies'?<Film size={18}/>:<Layers size={18}/>} {title}</button>)}</div>
+ <div className="toolbar">{Object.entries(kinds).map(([key,title])=><button key={key} className={kind===key?'primary-button':'secondary-button'} onClick={()=>setKind(key)}>{key==='live_channels'?<Tv size={18}/>:key==='movies'?<Film size={18}/>:<Layers size={18}/>} {title}</button>)}{kind==='live_channels'&&<button className="secondary-button toolbar__import" onClick={openImporter}><Download size={18}/>Importar Paraguay</button>}</div>
  <section className="panel-card panel-card--table"><DataTable rows={rows} columns={[{key:'nombre',label:'Nombre',render:r=><strong>{r.nombre||r.titulo}</strong>},{key:'activo',label:'Estado',render:r=><span className={`status-pill ${r.activo?'status-pill--ok':'status-pill--muted'}`}>{r.activo?'Visible':'Oculto'}</span>},...(kind!=='categories'?[{key:'manifest_url',label:'Reproducción',render:r=>r.manifest_url?'Fuente configurada':'Pendiente de fuente'}]:[{key:'slug',label:'Identificador'}])]} actions={r=><button className="mini-button" onClick={()=>{setError('');setForm({...blank,...r});}}><Pencil size={15}/>Editar</button>}/></section>
  {kind!=='categories'&&<p className="catalog-note">Agrega fuentes HTTPS de tu servicio autorizado. El catálogo de LumixTV requiere una integración que facilite su proveedor.</p>}
  {form&&<Modal title={`${form.id?'Editar':'Agregar'} · ${kinds[kind]}`} onClose={()=>!saving&&setForm(null)}><form className="form-grid" onSubmit={save}>
@@ -32,5 +45,16 @@ export default function ContentPage(){
  <label className="form-grid__full">Logo o portada (HTTPS)<input type="url" value={(kind==='movies'?form.poster_url:form.logo_url)||''} onChange={e=>change(kind==='movies'?'poster_url':'logo_url',e.target.value)}/></label></>}
  <label className="checkbox-field form-grid__full"><input type="checkbox" checked={form.activo} onChange={e=>change('activo',e.target.checked)}/>Visible en la app</label>
  <div className="form-actions form-grid__full"><button type="button" className="secondary-button" disabled={saving} onClick={()=>setForm(null)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving?'Guardando…':'Guardar'}</button></div>
- </form></Modal>}</>;
+ </form></Modal>}
+ {importer&&<Modal wide title="Importar TV de Paraguay" onClose={()=>!importing&&setImporter(null)}>
+  {importer.loading?<div className="loading-panel">Descargando la lista de iptv-org…</div>:<>
+   {importError&&<div className="alert alert--error">{importError}</div>}
+   {importer.summary&&<div className="import-summary"><span><strong>{importer.summary.total}</strong>Total</span><span><strong>{importer.summary.importable}</strong>Disponibles</span><span><strong>{importer.summary.existing}</strong>Ya agregados</span><span><strong>{importer.summary.incompatible}</strong>Sin HTTPS</span></div>}
+   {importer.source&&<p className="import-note">Se importarán únicamente los canales seleccionados que respondan a la comprobación. Fuente: <a href={importer.source.url} target="_blank" rel="noreferrer">{importer.source.name}</a>. Verifica que cuentas con autorización para ofrecer cada señal.</p>}
+   {importer.items?.length?<div className="import-table table-wrap"><table><thead><tr><th><input aria-label="Seleccionar todos" type="checkbox" checked={selected.size>0&&selected.size===importer.items.filter(item=>item.compatible&&!item.existing).length} onChange={e=>setSelected(new Set(e.target.checked?importer.items.filter(item=>item.compatible&&!item.existing).map(item=>item.sourceId):[]))}/></th><th>Canal</th><th>Servidor</th><th>Estado</th></tr></thead><tbody>{importer.items.map(item=>{
+    const disabled=!item.compatible||item.existing;return <tr key={item.sourceId}><td data-label="Elegir"><input aria-label={`Seleccionar ${item.name}`} type="checkbox" disabled={disabled} checked={selected.has(item.sourceId)} onChange={()=>toggleChannel(item.sourceId)}/></td><td data-label="Canal"><strong>{item.name}</strong>{item.hasCustomHeaders&&<small className="import-detail">Incluye cabeceras de reproducción</small>}</td><td data-label="Servidor">{item.manifestHost||'—'}</td><td data-label="Estado"><span className={`status-pill ${item.existing?'status-pill--muted':item.compatible?'status-pill--ok':'status-pill--fallido'}`}>{item.existing?'Ya agregado':item.compatible?'Listo para comprobar':'No compatible'}</span></td></tr>;
+   })}</tbody></table></div>:!importError&&<div className="empty-inline">No se encontraron canales en la lista.</div>}
+   <div className="form-actions import-actions"><button type="button" className="secondary-button" disabled={importing} onClick={()=>setImporter(null)}>Cancelar</button><button type="button" className="primary-button" disabled={importing||selected.size===0} onClick={importChannels}>{importing?'Comprobando e importando…':`Comprobar e importar (${selected.size})`}</button></div>
+  </>}
+ </Modal>}</>;
 }

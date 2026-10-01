@@ -51,7 +51,7 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
   const match=/^(channel|movie):([1-9][0-9]{0,14})$/.exec(req.params.contentId);
   if(!match) throw fail('Contenido inválido');
   const table=match[1]==='channel'?'live_channels':'movies';
-  const result=await pool.query(`SELECT c.manifest_url,c.license_url,c.drm_type FROM ${table} c LEFT JOIN categories k ON k.id=c.category_id WHERE c.id=$1 AND c.activo AND (k.id IS NULL OR k.activo)`,[match[2]]);
+  const result=await pool.query(`SELECT c.manifest_url,c.license_url,c.drm_type,c.stream_headers FROM ${table} c LEFT JOIN categories k ON k.id=c.category_id WHERE c.id=$1 AND c.activo AND (k.id IS NULL OR k.activo)`,[match[2]]);
   const content=result.rows[0];
   if(!content) throw fail('Contenido no disponible',404);
   if(!content.manifest_url) throw fail('Este contenido todavía no tiene una fuente de reproducción configurada.',409);
@@ -59,11 +59,15 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
   const license=content.drm_type==='widevine'?validHttps(content.license_url):null;
   res.json({ok:true,data:{contentId:req.params.contentId,manifestUrl:manifest,
    mimeType:manifest.split('?')[0].endsWith('.mpd')?'application/dash+xml':manifest.split('?')[0].endsWith('.m3u8')?'application/x-mpegURL':null,
-   streamHeaders:{},drm:license?{scheme:'widevine',licenseUrl:license,licenseHeaders:{}}:null}});
+   streamHeaders:validStreamHeaders(content.stream_headers),drm:license?{scheme:'widevine',licenseUrl:license,licenseHeaders:{}}:null}});
  }catch(e){next(e);}
 });
 function validHttps(value){
  try {const url=new URL(value);if(url.protocol!=='https:'||url.username||url.password)throw new Error();return url.href;}
  catch {throw fail('La fuente debe tener una URL HTTPS válida.',409);}
+}
+function validStreamHeaders(value){
+ const source=value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+ return Object.fromEntries(Object.entries(source).filter(([key,item])=>['Referer','User-Agent'].includes(key)&&typeof item==='string'&&item.length<=300));
 }
 export default router;

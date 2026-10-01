@@ -1,8 +1,8 @@
-export default function Modal({ title, children, onClose }) {
+export default function Modal({ title, children, onClose, wide = false }) {
   return (
     <div className="modal-backdrop" onMouseDown={onClose} role="presentation">
       <section
-        className="modal-card"
+        className={`modal-card${wide ? " modal-card--wide" : ""}`}
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"

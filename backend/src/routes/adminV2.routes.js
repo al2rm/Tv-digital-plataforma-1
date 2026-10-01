@@ -12,6 +12,7 @@ import {
   renewSubscription
 } from "../controllers/adminPayments.controller.js";
 import { listContent, createContent, updateContent, disableContent } from "../controllers/adminContent.controller.js";
+import { importParaguayPlaylist, previewParaguayPlaylist } from "../controllers/adminIptvImport.controller.js";
 import {
   listAutomationJobs,
   runAutomations
@@ -31,6 +32,8 @@ router.post("/subscriptions", createSubscription);
 router.post("/subscriptions/:id/renew", renewSubscription);
 router.get("/automations/jobs", listAutomationJobs);
 router.post("/automations/run", runAutomations);
+router.get("/content/import/iptv-org/paraguay/preview", previewParaguayPlaylist);
+router.post("/content/import/iptv-org/paraguay", importParaguayPlaylist);
 router.get("/content/:kind", listContent);
 router.post("/content/:kind", createContent);
 router.put("/content/:kind/:id", updateContent);
