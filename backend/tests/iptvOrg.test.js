@@ -59,15 +59,53 @@ test("bloquea destinos privados y permite un host público resuelto", async () =
   assert.equal(url, "https://video.test/live.m3u8");
 });
 
-test("comprueba disponibilidad y reintenta con GET cuando HEAD no está permitido", async () => {
-  const methods = [];
+test("comprueba que la fuente devuelva un manifiesto HLS reproducible", async () => {
   const result = await probeChannel(parseM3u(playlist)[0], {
     lookupImpl: async () => [{ address: "8.8.8.8", family: 4 }],
     fetchImpl: async (_url, options) => {
-      methods.push(options.method);
-      return new Response(null, { status: options.method === "HEAD" ? 405 : 206 });
+      assert.equal(options.method, "GET");
+      assert.equal(options.redirect, "manual");
+      return new Response("#EXTM3U\n#EXT-X-TARGETDURATION:6\nsegment-1.ts", {
+        status: 206,
+        headers: { "Content-Type": "application/vnd.apple.mpegurl" }
+      });
     }
   });
   assert.equal(result.available, true);
-  assert.deepEqual(methods, ["HEAD", "GET"]);
+});
+
+test("rechaza respuestas que no son HLS y segmentos que degradan a HTTP", async () => {
+  const channel = parseM3u(playlist)[0];
+  const lookupImpl = async () => [{ address: "8.8.8.8", family: 4 }];
+  const invalid = await probeChannel(channel, {
+    lookupImpl,
+    fetchImpl: async () => new Response("<html>bloqueado</html>", { status: 200 })
+  });
+  assert.equal(invalid.available, false);
+  assert.match(invalid.reason, /manifiesto HLS/);
+
+  const insecure = await probeChannel(channel, {
+    lookupImpl,
+    fetchImpl: async () => new Response("#EXTM3U\nhttp://video.test/segment.ts", { status: 200 })
+  });
+  assert.equal(insecure.available, false);
+  assert.match(insecure.reason, /sin HTTPS/);
+});
+
+test("valida cada redirección antes de seguirla", async () => {
+  const channel = parseM3u(playlist)[0];
+  const requests = [];
+  const result = await probeChannel(channel, {
+    lookupImpl: async (hostname) => [{
+      address: hostname === "privado.test" ? "127.0.0.1" : "8.8.8.8",
+      family: 4
+    }],
+    fetchImpl: async (url) => {
+      requests.push(url);
+      return new Response(null, { status: 302, headers: { Location: "https://privado.test/live.m3u8" } });
+    }
+  });
+  assert.equal(result.available, false);
+  assert.match(result.reason, /red privada/);
+  assert.equal(requests.length, 1);
 });

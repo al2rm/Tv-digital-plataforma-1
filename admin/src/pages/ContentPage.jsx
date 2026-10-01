@@ -28,8 +28,8 @@ export default function ContentPage(){
  const toggleChannel=sourceId=>setSelected(current=>{const next=new Set(current);if(next.has(sourceId))next.delete(sourceId);else if(next.size<(importer.limits?.maxSelection||50))next.add(sourceId);else setImportError(`Puedes importar hasta ${importer.limits?.maxSelection||50} canales por lote.`);return next;});
  const importChannels=async()=>{setImporting(true);setImportError('');try{
   const response=await api.post(`/admin/v2/content/import/iptv-org/${importer.countryCode}`,{sourceIds:[...selected]},{timeout:90000});
-  const result=response.data.data;const unavailable=result.unavailable.length;
-  setNotice(`${result.imported.length} canal${result.imported.length===1?'':'es'} de ${result.country.name} importado${result.imported.length===1?'':'s'}${unavailable?`; ${unavailable} fuente${unavailable===1?' no respondió':'s no respondieron'}`:''}.`);
+  const result=response.data.data;const unavailable=result.unavailable.length;const reasons=result.unavailable.slice(0,2).map(item=>`${item.name}: ${item.reason}`).join(' · ');const remaining=Math.max(0,unavailable-2);
+  setNotice(`${result.imported.length} canal${result.imported.length===1?'':'es'} de ${result.country.name} importado${result.imported.length===1?'':'s'}${unavailable?`; ${unavailable} omitido${unavailable===1?'':'s'} (${reasons}${remaining?` · y ${remaining} más`:''})`:''}.`);
   setImporter(null);setSelected(new Set());await load();
  }catch(err){setImportError(apiError(err));}finally{setImporting(false);}};
  return <><PageHeader eyebrow="App Android" title="Tu catálogo" description="Administra las categorías, canales y películas que verán tus clientes." action={<button className="primary-button" onClick={()=>{setError('');setForm({...blank});}}><Plus size={18}/>Agregar</button>}/>

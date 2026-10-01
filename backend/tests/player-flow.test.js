@@ -41,7 +41,7 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
    if(target==='https://iptv-org.github.io/api/countries.json')return new Response(JSON.stringify([{name:'Paraguay',code:'PY',flag:'🇵🇾'},{name:'Argentina',code:'AR',flag:'🇦🇷'}]),{status:200,headers:{'Content-Type':'application/json'}});
    if(target==='https://iptv-org.github.io/iptv/countries/py.m3u')return new Response(playlist,{status:200,headers:{'Content-Type':'audio/x-mpegurl'}});
    if(target==='https://iptv-org.github.io/iptv/countries/ar.m3u')return new Response('#EXTM3U\n#EXTINF:-1 tvg-id="AR.test",Señal Argentina\nhttps://8.8.4.4/ar/playlist.m3u8',{status:200,headers:{'Content-Type':'audio/x-mpegurl'}});
-   if(target==='https://8.8.8.8/npy/playlist.m3u8')return new Response(null,{status:200});
+   if(target==='https://8.8.8.8/npy/playlist.m3u8')return new Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\nsegment-1.ts',{status:200,headers:{'Content-Type':'application/vnd.apple.mpegurl'}});
    return originalFetch(input,options);
   };
   try{
