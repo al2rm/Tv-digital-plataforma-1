@@ -38,18 +38,24 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   const playlist=`#EXTM3U\n#EXTINF:-1 tvg-id="NPY.py",NPY prueba\n#EXTVLCOPT:http-referrer=https://www.npy.com.py/\nhttps://8.8.8.8/npy/playlist.m3u8`;
   globalThis.fetch=async(input,options={})=>{
    const target=String(input);
+   if(target==='https://iptv-org.github.io/api/countries.json')return new Response(JSON.stringify([{name:'Paraguay',code:'PY',flag:'🇵🇾'},{name:'Argentina',code:'AR',flag:'🇦🇷'}]),{status:200,headers:{'Content-Type':'application/json'}});
    if(target==='https://iptv-org.github.io/iptv/countries/py.m3u')return new Response(playlist,{status:200,headers:{'Content-Type':'audio/x-mpegurl'}});
+   if(target==='https://iptv-org.github.io/iptv/countries/ar.m3u')return new Response('#EXTM3U\n#EXTINF:-1 tvg-id="AR.test",Señal Argentina\nhttps://8.8.4.4/ar/playlist.m3u8',{status:200,headers:{'Content-Type':'audio/x-mpegurl'}});
    if(target==='https://8.8.8.8/npy/playlist.m3u8')return new Response(null,{status:200});
    return originalFetch(input,options);
   };
   try{
-   const preview=await request('/admin/v2/content/import/iptv-org/paraguay/preview',{token:admin});
+   const countries=await request('/admin/v2/content/import/iptv-org/countries',{token:admin});
+   assert.equal(countries.status,200);assert.equal(countries.data.some(country=>country.code==='py'),true);
+   const argentina=await request('/admin/v2/content/import/iptv-org/ar/preview',{token:admin});
+   assert.equal(argentina.status,200);assert.equal(argentina.data.country.code,'ar');
+   const preview=await request('/admin/v2/content/import/iptv-org/py/preview',{token:admin});
    assert.equal(preview.status,200);assert.equal(preview.data.summary.importable,1);
-   const imported=await request('/admin/v2/content/import/iptv-org/paraguay',{method:'POST',token:admin,body:{sourceIds:[preview.data.items[0].sourceId]}});
+   const imported=await request('/admin/v2/content/import/iptv-org/py',{method:'POST',token:admin,body:{sourceIds:[preview.data.items[0].sourceId]}});
    assert.equal(imported.status,201);assert.equal(imported.data.imported.length,1);
    const session=await request(`/playback/session/channel:${imported.data.imported[0].id}`,{token:admin});
    assert.equal(session.status,200);assert.equal(session.data.streamHeaders.Referer,'https://www.npy.com.py/');
-   const repeated=await request('/admin/v2/content/import/iptv-org/paraguay/preview',{token:admin});
+   const repeated=await request('/admin/v2/content/import/iptv-org/py/preview',{token:admin});
    assert.equal(repeated.data.summary.existing,1);
   }finally{globalThis.fetch=originalFetch;}
  });
