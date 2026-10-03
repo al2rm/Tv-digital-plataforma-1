@@ -8,10 +8,12 @@ import android.view.View
 import android.view.WindowManager
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.tvdigital.player.databinding.ActivityPlayerBinding
 import java.util.concurrent.Executors
 
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class PlayerActivity : Activity() {
     private lateinit var binding: ActivityPlayerBinding
     private val executor = Executors.newSingleThreadExecutor()
