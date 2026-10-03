@@ -1,6 +1,10 @@
 package com.tvdigital.player
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,6 +23,7 @@ class PlayerActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private val playbackHandler = Handler(Looper.getMainLooper())
     private var player: ExoPlayer? = null
+    private var externalSession: PlaybackSession? = null
     private var candidates = emptyList<PlaybackSession>()
     private var candidateIndex = 0
     private var renderedFirstFrame = false
@@ -42,13 +47,16 @@ class PlayerActivity : Activity() {
         setContentView(binding.root)
         position = savedInstanceState?.getLong("position") ?: 0
         binding.playButton.setOnClickListener { load() }
+        binding.externalPlayerButton.setOnClickListener { confirmExternalPlayback() }
     }
     override fun onStart() { super.onStart(); started = true; load() }
     private fun load() {
         val current = ++requestGeneration
+        externalSession = null
         binding.loading.visibility = View.VISIBLE
         binding.setupPanel.visibility = View.VISIBLE
         binding.playButton.isEnabled = false
+        binding.externalPlayerButton.visibility = View.GONE
         binding.statusText.text = "Preparando reproducción…"
         val demo = intent.getBooleanExtra("demo", false)
         val id = intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty()
@@ -66,11 +74,40 @@ class PlayerActivity : Activity() {
                 binding.playButton.isEnabled = true
                 result.onSuccess { session ->
                     release()
+                    externalSession = session
+                    binding.externalPlayerButton.visibility = View.VISIBLE
                     candidates = session.playbackCandidates()
                     candidateIndex = 0
                     startCandidate()
                 }.onFailure { showError(it.message ?: "No se pudo conectar") }
             }
+        }
+    }
+
+    private fun confirmExternalPlayback() {
+        val session = externalSession
+            ?: return showError("Primero solicita la señal del canal.")
+        AlertDialog.Builder(this)
+            .setTitle(R.string.external_player_title)
+            .setMessage(R.string.external_player_warning)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.external_player_continue) { _, _ ->
+                openExternalPlayer(session)
+            }
+            .show()
+    }
+
+    private fun openExternalPlayer(session: PlaybackSession) {
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(session.manifestUrl), "video/*")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+        }
+        try {
+            startActivity(Intent.createChooser(viewIntent, getString(R.string.external_player_chooser)))
+        } catch (_: ActivityNotFoundException) {
+            binding.setupPanel.visibility = View.VISIBLE
+            binding.statusText.text = getString(R.string.external_player_missing)
+            binding.externalPlayerButton.visibility = View.VISIBLE
         }
     }
 
@@ -141,6 +178,7 @@ class PlayerActivity : Activity() {
     private fun showError(message: String) {
         release(); binding.setupPanel.visibility = View.VISIBLE
         binding.loading.visibility = View.GONE
+        binding.externalPlayerButton.visibility = if (externalSession == null) View.GONE else View.VISIBLE
         binding.statusText.text = message; binding.playButton.isEnabled = true
     }
     private fun releasePlayer() {
@@ -163,6 +201,7 @@ class PlayerActivity : Activity() {
     }
     override fun onDestroy() {
         playbackHandler.removeCallbacksAndMessages(null)
+        externalSession = null
         executor.shutdownNow()
         super.onDestroy()
     }
