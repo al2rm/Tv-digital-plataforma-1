@@ -54,4 +54,53 @@ class PlaybackSessionTest {
     fun secureModeRejectsCleartextManifest() {
         requirePlaybackUrl("http://example.test/video.mpd", "manifestUrl", false)
     }
+
+    @Test
+    fun prioritizesHlsForXtreamTransportStream() {
+        val session = PlaybackSession(
+            contentId = "canal-xtream",
+            manifestUrl = "http://provider.example/live/user/token/123.ts",
+            mimeType = null,
+            streamHeaders = emptyMap(),
+            drm = null
+        )
+
+        val candidates = session.playbackCandidates()
+
+        assertEquals(2, candidates.size)
+        assertEquals("http://provider.example/live/user/token/123.m3u8", candidates[0].manifestUrl)
+        assertEquals("application/x-mpegURL", candidates[0].mimeType)
+        assertEquals("http://provider.example/live/user/token/123.ts", candidates[1].manifestUrl)
+        assertEquals("video/mp2t", candidates[1].mimeType)
+    }
+
+    @Test
+    fun keepsExistingHlsAsOnlyCandidate() {
+        val session = PlaybackSession(
+            contentId = "canal-hls",
+            manifestUrl = "http://provider.example/live/channel.m3u8?token=short",
+            mimeType = "application/x-mpegURL",
+            streamHeaders = emptyMap(),
+            drm = null
+        )
+
+        assertEquals(listOf(session), session.playbackCandidates())
+    }
+
+    @Test
+    fun doesNotRewriteDrmTransportStream() {
+        val session = PlaybackSession(
+            contentId = "canal-drm",
+            manifestUrl = "https://provider.example/live/channel.ts",
+            mimeType = null,
+            streamHeaders = emptyMap(),
+            drm = PlaybackSession.DrmConfig(
+                scheme = "widevine",
+                licenseUrl = "https://provider.example/license",
+                licenseHeaders = emptyMap()
+            )
+        )
+
+        assertEquals(listOf(session), session.playbackCandidates())
+    }
 }
