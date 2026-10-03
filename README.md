@@ -9,8 +9,10 @@ Plataforma propia para administrar clientes, suscripciones, pagos y una aplicaci
 - CRM, avisos por WhatsApp y automatizaciones de vencimiento;
 - catálogo administrable de categorías, canales y películas;
 - conexión con proveedores Xtream Codes mediante `player_api.php`, exploración por categorías e importación por `stream_id`;
+- preferencias por proveedor para Automático, HLS o TS y cabeceras autorizadas `User-Agent`/`Referer`;
 - app Android para teléfono y Android TV con inicio de sesión, catálogo, búsqueda, favoritos y Media3;
 - reproducción HLS/DASH y Widevine mediante fuentes HTTPS autorizadas;
+- diagnóstico de formato/códec, selección manual HLS/TS e historial reciente en Android;
 - bloqueo de reproducción cuando la cuenta está desactivada o la suscripción está vencida;
 - compilación automática de la APK de prueba con GitHub Actions.
 
