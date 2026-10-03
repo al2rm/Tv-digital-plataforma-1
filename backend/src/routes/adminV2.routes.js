@@ -20,6 +20,12 @@ import {
   previewParaguayPlaylist
 } from "../controllers/adminIptvImport.controller.js";
 import {
+  createXtreamProvider,
+  importXtreamStreams,
+  listXtreamProviders,
+  previewXtreamStreams
+} from "../controllers/adminXtream.controller.js";
+import {
   listAutomationJobs,
   runAutomations
 } from "../controllers/automation.controller.js";
@@ -43,6 +49,10 @@ router.post("/content/import/iptv-org/paraguay", importParaguayPlaylist);
 router.get("/content/import/iptv-org/countries", listIptvOrgCountries);
 router.get("/content/import/iptv-org/:countryCode/preview", previewCountryPlaylist);
 router.post("/content/import/iptv-org/:countryCode", importCountryPlaylist);
+router.get("/content/import/xtream/providers", listXtreamProviders);
+router.post("/content/import/xtream/providers", createXtreamProvider);
+router.get("/content/import/xtream/providers/:providerId/streams", previewXtreamStreams);
+router.post("/content/import/xtream/providers/:providerId/import", importXtreamStreams);
 router.get("/content/:kind", listContent);
 router.post("/content/:kind", createContent);
 router.put("/content/:kind/:id", updateContent);

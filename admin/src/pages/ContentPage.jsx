@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Film, Layers, Pencil, Plus, Tv } from 'lucide-react';
+import { Download, Film, Layers, Pencil, Plus, Server, Tv } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
@@ -9,6 +9,7 @@ const blank={nombre:'',titulo:'',category_id:'',manifest_url:'',license_url:'',d
 export default function ContentPage(){
  const [kind,setKind]=useState('live_channels'),[rows,setRows]=useState([]),[categories,setCategories]=useState([]),[form,setForm]=useState(null),[error,setError]=useState(''),[saving,setSaving]=useState(false),[notice,setNotice]=useState('');
  const [importer,setImporter]=useState(null),[selected,setSelected]=useState(new Set()),[importing,setImporting]=useState(false),[importError,setImportError]=useState('');
+ const [xtream,setXtream]=useState(null),[xtreamSelected,setXtreamSelected]=useState(new Set()),[xtreamBusy,setXtreamBusy]=useState(false),[xtreamError,setXtreamError]=useState('');
  const load=useCallback(async()=>{try{const [r,c]=await Promise.all([api.get(`/admin/v2/content/${kind}`),api.get('/admin/v2/content/categories')]);setRows(r.data.data);setCategories(c.data.data);}catch(e){setError(apiError(e));}},[kind]);
  useEffect(()=>{setRows([]);setError('');void load();},[load]);
  const change=(key,value)=>setForm({...form,[key]:value});
@@ -32,10 +33,30 @@ export default function ContentPage(){
   setNotice(`${result.imported.length} canal${result.imported.length===1?'':'es'} de ${result.country.name} importado${result.imported.length===1?'':'s'}${unavailable?`; ${unavailable} omitido${unavailable===1?'':'s'} (${reasons}${remaining?` · y ${remaining} más`:''})`:''}.`);
   setImporter(null);setSelected(new Set());await load();
  }catch(err){setImportError(apiError(err));}finally{setImporting(false);}};
+ const loadXtreamStreams=async(providerId,filters={})=>{setXtreamBusy(true);setXtreamError('');setXtreamSelected(new Set());try{
+  const params={search:filters.search||'',categoryId:filters.categoryId||'',limit:100};
+  const response=await api.get(`/admin/v2/content/import/xtream/providers/${providerId}/streams`,{params,timeout:60000});const data=response.data.data;
+  setXtream(current=>({...current,...data,mode:'streams',providerId:Number(providerId),search:params.search,categoryId:params.categoryId}));
+  setXtreamSelected(new Set(data.items.filter(item=>!item.imported).slice(0,data.limits?.maxSelection||50).map(item=>item.streamId)));
+ }catch(err){setXtreamError(apiError(err));}finally{setXtreamBusy(false);}};
+ const openXtreamImporter=async()=>{setXtream({mode:'loading',providers:[],name:'',baseUrl:'',username:'',password:''});setXtreamSelected(new Set());setXtreamError('');try{
+  const response=await api.get('/admin/v2/content/import/xtream/providers');const providers=response.data.data;
+  if(!providers.length){setXtream({mode:'connect',providers,name:'Mi proveedor Xtream',baseUrl:'',username:'',password:''});return;}
+  setXtream({mode:'loading',providers,providerId:providers[0].id,search:'',categoryId:''});await loadXtreamStreams(providers[0].id);
+ }catch(err){setXtreamError(apiError(err));setXtream(current=>({...current,mode:'connect'}));}};
+ const connectXtream=async e=>{e.preventDefault();setXtreamBusy(true);setXtreamError('');try{
+  const response=await api.post('/admin/v2/content/import/xtream/providers',{name:xtream.name,baseUrl:xtream.baseUrl,username:xtream.username,password:xtream.password},{timeout:60000});
+  const provider=response.data.data.provider;const providers=[...(xtream.providers||[]),provider];setXtream({mode:'loading',providers,providerId:provider.id,search:'',categoryId:''});await loadXtreamStreams(provider.id);
+ }catch(err){setXtreamError(apiError(err));}finally{setXtreamBusy(false);}};
+ const toggleXtream=streamId=>setXtreamSelected(current=>{const next=new Set(current);if(next.has(streamId))next.delete(streamId);else if(next.size<(xtream.limits?.maxSelection||50))next.add(streamId);else setXtreamError(`Puedes importar hasta ${xtream.limits?.maxSelection||50} canales por lote.`);return next;});
+ const importXtream=async()=>{setXtreamBusy(true);setXtreamError('');try{
+  const response=await api.post(`/admin/v2/content/import/xtream/providers/${xtream.providerId}/import`,{streamIds:[...xtreamSelected]},{timeout:90000});const count=response.data.data.imported.length;
+  setNotice(`${count} canal${count===1?'':'es'} Xtream importado${count===1?'':'s'}. Las credenciales quedan cifradas y no se envían al catálogo.`);setXtream(null);setXtreamSelected(new Set());await load();
+ }catch(err){setXtreamError(apiError(err));}finally{setXtreamBusy(false);}};
  return <><PageHeader eyebrow="App Android" title="Tu catálogo" description="Administra las categorías, canales y películas que verán tus clientes." action={<button className="primary-button" onClick={()=>{setError('');setForm({...blank});}}><Plus size={18}/>Agregar</button>}/>
  {notice&&<div className="alert alert--success">{notice}</div>}{error&&!form&&<div className="alert alert--error">{error}</div>}
- <div className="toolbar">{Object.entries(kinds).map(([key,title])=><button key={key} className={kind===key?'primary-button':'secondary-button'} onClick={()=>setKind(key)}>{key==='live_channels'?<Tv size={18}/>:key==='movies'?<Film size={18}/>:<Layers size={18}/>} {title}</button>)}{kind==='live_channels'&&<button className="secondary-button toolbar__import" onClick={openImporter}><Download size={18}/>Importar iptv-org</button>}</div>
- <section className="panel-card panel-card--table"><DataTable rows={rows} columns={[{key:'nombre',label:'Nombre',render:r=><strong>{r.nombre||r.titulo}</strong>},{key:'activo',label:'Estado',render:r=><span className={`status-pill ${r.activo?'status-pill--ok':'status-pill--muted'}`}>{r.activo?'Visible':'Oculto'}</span>},...(kind!=='categories'?[{key:'manifest_url',label:'Reproducción',render:r=>r.manifest_url?'Fuente configurada':'Pendiente de fuente'}]:[{key:'slug',label:'Identificador'}])]} actions={r=><button className="mini-button" onClick={()=>{setError('');setForm({...blank,...r});}}><Pencil size={15}/>Editar</button>}/></section>
+ <div className="toolbar">{Object.entries(kinds).map(([key,title])=><button key={key} className={kind===key?'primary-button':'secondary-button'} onClick={()=>setKind(key)}>{key==='live_channels'?<Tv size={18}/>:key==='movies'?<Film size={18}/>:<Layers size={18}/>} {title}</button>)}{kind==='live_channels'&&<><button className="secondary-button toolbar__import" onClick={openXtreamImporter}><Server size={18}/>Importar Xtream</button><button className="secondary-button" onClick={openImporter}><Download size={18}/>Importar iptv-org</button></>}</div>
+ <section className="panel-card panel-card--table"><DataTable rows={rows} columns={[{key:'nombre',label:'Nombre',render:r=><strong>{r.nombre||r.titulo}</strong>},{key:'activo',label:'Estado',render:r=><span className={`status-pill ${r.activo?'status-pill--ok':'status-pill--muted'}`}>{r.activo?'Visible':'Oculto'}</span>},...(kind!=='categories'?[{key:'manifest_url',label:'Reproducción',render:r=>r.xtream_provider_id?'Xtream configurado':r.manifest_url?'Fuente configurada':'Pendiente de fuente'}]:[{key:'slug',label:'Identificador'}])]} actions={r=><button className="mini-button" onClick={()=>{setError('');setForm({...blank,...r});}}><Pencil size={15}/>Editar</button>}/></section>
  {kind!=='categories'&&<p className="catalog-note">Agrega fuentes HTTP o HTTPS de tu servicio autorizado. HTTP se admite para proveedores heredados, pero no cifra la señal ni las credenciales.</p>}
  {form&&<Modal title={`${form.id?'Editar':'Agregar'} · ${kinds[kind]}`} onClose={()=>!saving&&setForm(null)}><form className="form-grid" onSubmit={save}>
  {error&&<div className="alert alert--error form-grid__full">{error}</div>}
@@ -59,6 +80,31 @@ export default function ContentPage(){
     const disabled=!item.compatible||item.existing;const limitReached=!selected.has(item.sourceId)&&selected.size>=(importer.limits?.maxSelection||50);return <tr key={item.sourceId}><td data-label="Elegir"><input aria-label={`Seleccionar ${item.name}`} type="checkbox" disabled={disabled||limitReached} checked={selected.has(item.sourceId)} onChange={()=>toggleChannel(item.sourceId)}/></td><td data-label="Canal"><strong>{item.name}</strong>{item.hasCustomHeaders&&<small className="import-detail">Incluye cabeceras de reproducción</small>}</td><td data-label="Servidor">{item.manifestHost||'—'}</td><td data-label="Estado"><span className={`status-pill ${item.existing?'status-pill--muted':item.compatible?'status-pill--ok':'status-pill--fallido'}`}>{item.existing?'Ya agregado':item.compatible?'Listo para comprobar':'No compatible'}</span></td></tr>;
    })}</tbody></table></div>:!importError&&<div className="empty-inline">No se encontraron canales en la lista.</div>}
    <div className="form-actions import-actions"><button type="button" className="secondary-button" disabled={importing} onClick={()=>setImporter(null)}>Cancelar</button><button type="button" className="primary-button" disabled={importing||selected.size===0} onClick={importChannels}>{importing?'Comprobando e importando…':`Comprobar e importar (${selected.size})`}</button></div>
+  </>}
+ </Modal>}
+ {xtream&&<Modal wide title="Importar canales de Xtream Codes" onClose={()=>!xtreamBusy&&setXtream(null)}>
+  {xtream.mode==='loading'?<div className="loading-panel">Consultando el servidor Xtream…</div>:xtream.mode==='connect'?<form className="form-grid" onSubmit={connectXtream}>
+   {xtreamError&&<div className="alert alert--error form-grid__full">{xtreamError}</div>}
+   <p className="import-note form-grid__full">Conecta una cuenta autorizada. El usuario y la contraseña se cifran en el servidor y nunca se muestran en el catálogo ni se guardan en la app.</p>
+   <label className="form-grid__full">Nombre del proveedor<input required maxLength={120} placeholder="Mi proveedor Xtream" value={xtream.name||''} onChange={e=>setXtream({...xtream,name:e.target.value})}/></label>
+   <label className="form-grid__full">Servidor Xtream<input required type="url" placeholder="http://servidor:puerto" value={xtream.baseUrl||''} onChange={e=>setXtream({...xtream,baseUrl:e.target.value})}/></label>
+   <label>Usuario<input required autoComplete="username" value={xtream.username||''} onChange={e=>setXtream({...xtream,username:e.target.value})}/></label>
+   <label>Contraseña<input required type="password" autoComplete="new-password" value={xtream.password||''} onChange={e=>setXtream({...xtream,password:e.target.value})}/></label>
+   <div className="form-actions form-grid__full"><button type="button" className="secondary-button" disabled={xtreamBusy} onClick={()=>setXtream(null)}>Cancelar</button><button className="primary-button" disabled={xtreamBusy}>{xtreamBusy?'Validando cuenta…':'Conectar y cargar canales'}</button></div>
+  </form>:<>
+   {xtreamError&&<div className="alert alert--error">{xtreamError}</div>}
+   <div className="form-grid">
+    <label>Proveedor<select value={xtream.providerId||''} disabled={xtreamBusy} onChange={e=>void loadXtreamStreams(e.target.value)}>{(xtream.providers||[]).map(provider=><option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></label>
+    <label>Categoría<select value={xtream.categoryId||''} disabled={xtreamBusy} onChange={e=>void loadXtreamStreams(xtream.providerId,{search:xtream.search,categoryId:e.target.value})}><option value="">Todas las categorías</option>{(xtream.categories||[]).map(category=><option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+    <label className="form-grid__full">Buscar canal<input placeholder="Nombre del canal" value={xtream.search||''} onChange={e=>setXtream({...xtream,search:e.target.value})} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void loadXtreamStreams(xtream.providerId,{search:xtream.search,categoryId:xtream.categoryId});}}}/></label>
+   </div>
+   <div className="form-actions"><button type="button" className="secondary-button" disabled={xtreamBusy} onClick={()=>setXtream({...xtream,mode:'connect',name:'Otro proveedor',baseUrl:'',username:'',password:''})}><Plus size={16}/>Nuevo proveedor</button><button type="button" className="secondary-button" disabled={xtreamBusy} onClick={()=>void loadXtreamStreams(xtream.providerId,{search:xtream.search,categoryId:xtream.categoryId})}>{xtreamBusy?'Consultando…':'Buscar'}</button></div>
+   {xtream.account&&<div className="import-summary"><span><strong>{xtream.pagination?.total||0}</strong>Resultados</span><span><strong>{xtream.account.status}</strong>Cuenta</span><span><strong>{xtream.account.activeConnections}/{xtream.account.maxConnections||'—'}</strong>Conexiones</span><span><strong>{xtream.account.expiresAt?new Date(xtream.account.expiresAt).toLocaleDateString('es-PY'):'—'}</strong>Vencimiento</span></div>}
+   <p className="import-note">Se importan el nombre, logo, categoría y <code>stream_id</code>. La app recibe un enlace temporal de TV Digital al iniciar la reproducción.</p>
+   {xtream.items?.length?<div className="import-table table-wrap"><table><thead><tr><th><input aria-label="Seleccionar canales Xtream disponibles" type="checkbox" checked={xtreamSelected.size>0&&xtreamSelected.size===Math.min(xtream.items.filter(item=>!item.imported).length,xtream.limits?.maxSelection||50)} onChange={e=>setXtreamSelected(new Set(e.target.checked?xtream.items.filter(item=>!item.imported).slice(0,xtream.limits?.maxSelection||50).map(item=>item.streamId):[]))}/></th><th>Canal</th><th>Categoría</th><th>Formato</th><th>Estado</th></tr></thead><tbody>{xtream.items.map(item=>{
+    const category=xtream.categories?.find(entry=>entry.id===item.categoryId)?.name||'Sin categoría';const limitReached=!xtreamSelected.has(item.streamId)&&xtreamSelected.size>=(xtream.limits?.maxSelection||50);return <tr key={item.streamId}><td data-label="Elegir"><input aria-label={`Seleccionar ${item.name}`} type="checkbox" disabled={item.imported||limitReached} checked={xtreamSelected.has(item.streamId)} onChange={()=>toggleXtream(item.streamId)}/></td><td data-label="Canal"><strong>{item.name}</strong><small className="import-detail">ID {item.streamId}</small></td><td data-label="Categoría">{category}</td><td data-label="Formato">{item.container.toUpperCase()}</td><td data-label="Estado"><span className={`status-pill ${item.imported?'status-pill--muted':'status-pill--ok'}`}>{item.imported?'Ya importado':'Disponible'}</span></td></tr>;
+   })}</tbody></table></div>:!xtreamBusy&&!xtreamError&&<div className="empty-inline">No se encontraron canales con esos filtros.</div>}
+   <div className="form-actions import-actions"><button type="button" className="secondary-button" disabled={xtreamBusy} onClick={()=>setXtream(null)}>Cancelar</button><button type="button" className="primary-button" disabled={xtreamBusy||xtreamSelected.size===0} onClick={importXtream}>{xtreamBusy?'Importando…':`Importar (${xtreamSelected.size})`}</button></div>
   </>}
  </Modal>}</>;
 }

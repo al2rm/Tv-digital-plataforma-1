@@ -8,6 +8,7 @@ Plataforma propia para administrar clientes, suscripciones, pagos y una aplicaci
 - clientes, accesos, precios, suscripciones, pagos y renovaciones;
 - CRM, avisos por WhatsApp y automatizaciones de vencimiento;
 - catálogo administrable de categorías, canales y películas;
+- conexión con proveedores Xtream Codes mediante `player_api.php`, exploración por categorías e importación por `stream_id`;
 - app Android para teléfono y Android TV con inicio de sesión, catálogo, búsqueda, favoritos y Media3;
 - reproducción HLS/DASH y Widevine mediante fuentes HTTPS autorizadas;
 - bloqueo de reproducción cuando la cuenta está desactivada o la suscripción está vencida;
@@ -24,7 +25,7 @@ Plataforma propia para administrar clientes, suscripciones, pagos y una aplicaci
 
 1. Despliega el panel y la API siguiendo [docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md).
 2. En el panel, configura precios, clientes y suscripciones.
-3. Agrega fuentes HTTPS autorizadas desde **Catálogo**.
+3. Agrega fuentes autorizadas desde **Catálogo** o usa **Importar Xtream** para conectar el servidor, revisar sus canales e importar los seleccionados.
 4. Descarga la APK del resultado del flujo **Compilar app Android** en GitHub Actions.
 5. En la app, escribe la dirección HTTPS de tu servidor e inicia sesión con un cliente del panel.
 
@@ -42,3 +43,4 @@ npm run build --prefix admin
 ```
 
 Los secretos se configuran únicamente mediante variables de entorno y nunca se suben al repositorio.
+Las credenciales Xtream se cifran con `XTREAM_CREDENTIALS_KEY`; la app Android recibe solamente un enlace temporal de TV Digital y nunca recibe el usuario o la contraseña del proveedor.
