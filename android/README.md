@@ -28,4 +28,4 @@ La app consume `/api/auth/login`, `/api/app/account`, `/api/catalog/*` y `/api/p
 
 ## Desarrollo local
 
-La variante debug acepta `http://10.0.2.2:3000/` para conectar un emulador con el backend de la computadora. La versión release exige HTTPS.
+La variante debug acepta servidores y señales HTTP para pruebas. La versión release exige HTTPS por defecto; para un proveedor heredado compílala con `-PALLOW_HTTP_STREAMS=true`. HTTP no cifra la señal ni las credenciales.
