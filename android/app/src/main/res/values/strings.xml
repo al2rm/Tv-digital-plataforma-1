@@ -15,4 +15,10 @@
     <string name="all_categories">Todas las categorías</string>
     <string name="loading_catalog">Cargando catálogo…</string>
     <string name="empty_catalog">No encontramos contenido. Prueba otros filtros o consulta al administrador.</string>
+    <string name="open_external_player">Probar en otro reproductor</string>
+    <string name="external_player_title">Probar el mismo canal</string>
+    <string name="external_player_warning">Se compartirá temporalmente la URL de este canal con el reproductor que elijas. La URL puede incluir datos de acceso del proveedor. Continúa solo con un servicio autorizado.</string>
+    <string name="external_player_continue">Continuar</string>
+    <string name="external_player_chooser">Abrir canal con…</string>
+    <string name="external_player_missing">No hay otro reproductor compatible instalado. Instala VLC para Android y vuelve a intentarlo.</string>
 </resources>
