@@ -41,8 +41,6 @@ object TvPlayerFactory {
             .build()
             .also { player ->
                 player.setMediaItem(mediaItemBuilder.build())
-                player.prepare()
-                player.playWhenReady = true
             }
     }
 }
