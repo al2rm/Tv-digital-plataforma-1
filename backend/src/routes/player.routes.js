@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../database/db.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
+import { env } from '../config/env.js';
 
 const router = Router();
 router.use(['/app','/catalog','/playback'],authMiddleware);
@@ -55,16 +56,16 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
   const content=result.rows[0];
   if(!content) throw fail('Contenido no disponible',404);
   if(!content.manifest_url) throw fail('Este contenido todavía no tiene una fuente de reproducción configurada.',409);
-  const manifest=validHttps(content.manifest_url);
-  const license=content.drm_type==='widevine'?validHttps(content.license_url):null;
+  const manifest=validMediaUrl(content.manifest_url,env.allowHttpStreams);
+  const license=content.drm_type==='widevine'?validMediaUrl(content.license_url,false):null;
   res.json({ok:true,data:{contentId:req.params.contentId,manifestUrl:manifest,
    mimeType:manifest.split('?')[0].endsWith('.mpd')?'application/dash+xml':manifest.split('?')[0].endsWith('.m3u8')?'application/x-mpegURL':null,
    streamHeaders:validStreamHeaders(content.stream_headers),drm:license?{scheme:'widevine',licenseUrl:license,licenseHeaders:{}}:null}});
  }catch(e){next(e);}
 });
-function validHttps(value){
- try {const url=new URL(value);if(url.protocol!=='https:'||url.username||url.password)throw new Error();return url.href;}
- catch {throw fail('La fuente debe tener una URL HTTPS válida.',409);}
+function validMediaUrl(value,allowHttp=false){
+ try {const url=new URL(value);if(!(url.protocol==='https:'||(allowHttp&&url.protocol==='http:'))||url.username||url.password)throw new Error();return url.href;}
+ catch {throw fail(`La fuente debe tener una URL ${allowHttp?'HTTP o HTTPS':'HTTPS'} válida.`,409);}
 }
 function validStreamHeaders(value){
  const source=value&&typeof value==='object'&&!Array.isArray(value)?value:{};
