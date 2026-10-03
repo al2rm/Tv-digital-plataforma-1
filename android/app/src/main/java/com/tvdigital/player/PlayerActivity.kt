@@ -48,6 +48,8 @@ class PlayerActivity : Activity() {
         position = savedInstanceState?.getLong("position") ?: 0
         binding.playButton.setOnClickListener { load() }
         binding.externalPlayerButton.setOnClickListener { confirmExternalPlayback() }
+        binding.hlsButton.setOnClickListener { selectCandidate("HLS") }
+        binding.tsButton.setOnClickListener { selectCandidate("TS") }
     }
     override fun onStart() { super.onStart(); started = true; load() }
     private fun load() {
@@ -78,6 +80,7 @@ class PlayerActivity : Activity() {
                     binding.externalPlayerButton.visibility = View.VISIBLE
                     candidates = session.playbackCandidates()
                     candidateIndex = 0
+                    updateCandidateButtons()
                     startCandidate()
                 }.onFailure { showError(it.message ?: "No se pudo conectar") }
             }
@@ -120,9 +123,9 @@ class PlayerActivity : Activity() {
         binding.loading.visibility = View.VISIBLE
         binding.playButton.isEnabled = false
         binding.statusText.text = if (candidateIndex == 0 && candidates.size > 1) {
-            "Conectando por HLS, el formato recomendado…"
+            "Conectando por ${session.formatLabel()}…"
         } else if (candidateIndex > 0) {
-            "HLS no respondió. Probando la señal TS original…"
+            "Probando la alternativa ${session.formatLabel()}…"
         } else {
             "Conectando con el canal…"
         }
@@ -136,9 +139,11 @@ class PlayerActivity : Activity() {
                         Player.STATE_BUFFERING -> {
                             binding.loading.visibility = View.VISIBLE
                             binding.statusText.text = "Recibiendo la señal del canal…"
+                            updateDiagnostics(session, "Buffering")
                         }
                         Player.STATE_READY -> {
                             binding.statusText.text = "Señal recibida. Esperando la primera imagen…"
+                            updateDiagnostics(session, "Señal lista")
                         }
                         Player.STATE_ENDED -> tryNextCandidate("La transmisión terminó sin mostrar video.")
                     }
@@ -149,9 +154,12 @@ class PlayerActivity : Activity() {
                     playbackHandler.removeCallbacks(firstFrameTimeout)
                     binding.loading.visibility = View.GONE
                     binding.setupPanel.visibility = View.GONE
+                    recordHistory(session.contentId)
+                    updateDiagnostics(session, "Reproduciendo")
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    updateDiagnostics(session, "Error ${error.errorCodeName}")
                     tryNextCandidate("El proveedor rechazó o interrumpió la señal (${error.errorCodeName}).")
                 }
             })
@@ -162,6 +170,38 @@ class PlayerActivity : Activity() {
         }.onFailure {
             tryNextCandidate(it.message ?: "No se pudo iniciar el reproductor")
         }
+    }
+
+    private fun selectCandidate(label: String) {
+        val selected = candidates.indexOfFirst { it.formatLabel() == label }
+        if (selected < 0) return
+        candidateIndex = selected
+        position = 0
+        startCandidate()
+    }
+
+    private fun updateCandidateButtons() {
+        binding.hlsButton.visibility = if (candidates.any { it.formatLabel() == "HLS" }) View.VISIBLE else View.GONE
+        binding.tsButton.visibility = if (candidates.any { it.formatLabel() == "TS" }) View.VISIBLE else View.GONE
+    }
+
+    private fun updateDiagnostics(session: PlaybackSession, state: String) {
+        val video = player?.videoFormat
+        val audio = player?.audioFormat
+        val resolution = video?.let { if (it.width > 0 && it.height > 0) "${it.width}×${it.height}" else null }
+        val details = listOfNotNull(
+            "Formato ${session.formatLabel()}",
+            resolution,
+            video?.sampleMimeType?.substringAfterLast('/'),
+            audio?.sampleMimeType?.substringAfterLast('/')
+        ).distinct().joinToString(" · ")
+        binding.diagnosticText.text = "$state · $details"
+    }
+
+    private fun recordHistory(contentId: String) {
+        val preferences = getSharedPreferences("history", MODE_PRIVATE)
+        val key = "${SessionStore.baseUrl}|${SessionStore.userId}"
+        preferences.edit().putString(key, HistoryCodec.record(preferences.getString(key, ""), contentId)).apply()
     }
 
     private fun tryNextCandidate(lastError: String) {
@@ -192,6 +232,7 @@ class PlayerActivity : Activity() {
         candidates = emptyList()
         candidateIndex = 0
         renderedFirstFrame = false
+        updateCandidateButtons()
     }
     override fun onSaveInstanceState(out: Bundle) { out.putLong("position", player?.currentPosition ?: position); super.onSaveInstanceState(out) }
     override fun onStop() {

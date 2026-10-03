@@ -5,7 +5,40 @@ import { assertPublicChannelUrl } from "./iptvOrg.service.js";
 
 const MAX_JSON_BYTES = 30 * 1024 * 1024;
 const ALLOWED_CONTAINERS = new Set(["ts", "m3u8"]);
+const ALLOWED_OUTPUT_PREFERENCES = new Set(["auto", ...ALLOWED_CONTAINERS]);
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
+
+const cleanHeaderValue = (value, field) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) return null;
+  if (normalized.length > 300 || /[\r\n]/.test(normalized)) throw fail(`${field} no es válido`);
+  return normalized;
+};
+
+export const normalizePlaybackPreferences = ({ userAgent, referer, preferredOutput } = {}) => {
+  const output = String(preferredOutput || "auto").toLowerCase();
+  if (!ALLOWED_OUTPUT_PREFERENCES.has(output)) throw fail("El formato preferido debe ser automático, HLS o TS");
+  let normalizedReferer = cleanHeaderValue(referer, "Referer");
+  if (normalizedReferer) {
+    try {
+      const url = new URL(normalizedReferer);
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error();
+      normalizedReferer = url.href;
+    } catch { throw fail("Referer no es una URL HTTP o HTTPS válida"); }
+  }
+  return {
+    userAgent: cleanHeaderValue(userAgent, "User-Agent"),
+    referer: normalizedReferer,
+    preferredOutput: output
+  };
+};
+
+export const providerPlaybackHeaders = (provider) => {
+  const headers = {};
+  if (provider.user_agent || provider.userAgent) headers["User-Agent"] = provider.user_agent || provider.userAgent;
+  if (provider.referer) headers.Referer = provider.referer;
+  return headers;
+};
 
 const encryptionKey = () => {
   if (!env.xtreamCredentialsKey || env.xtreamCredentialsKey.length < 16) {
@@ -67,7 +100,7 @@ export const callXtreamApi = async (provider, action = "", { fetchImpl = fetch }
   let response;
   try {
     response = await fetchImpl(url, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...providerPlaybackHeaders(provider) },
       redirect: "error",
       signal: AbortSignal.timeout(25000)
     });
@@ -129,6 +162,12 @@ export const buildXtreamStreamUrl = (provider, streamId, container = "ts") => {
   return `${credentials.baseUrl}/live/${encodeURIComponent(credentials.username)}/${encodeURIComponent(credentials.password)}/${streamId}.${extension}`;
 };
 
+export const preferredXtreamContainer = (provider, importedContainer = "ts") => {
+  const preference = String(provider.preferred_output || provider.preferredOutput || "auto").toLowerCase();
+  if (ALLOWED_CONTAINERS.has(preference)) return preference;
+  return ALLOWED_CONTAINERS.has(importedContainer) ? importedContainer : "ts";
+};
+
 export const signXtreamPlayback = ({ channelId, userId }) => jwt.sign(
   { purpose: "xtream-playback", channelId: String(channelId), userId: String(userId) },
   env.jwtSecret,
@@ -142,4 +181,3 @@ export const verifyXtreamPlayback = (token, channelId) => {
     return payload;
   } catch { throw fail("El enlace temporal de reproducción venció", 401); }
 };
-

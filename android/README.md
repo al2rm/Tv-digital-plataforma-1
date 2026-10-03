@@ -29,3 +29,9 @@ La app consume `/api/auth/login`, `/api/app/account`, `/api/catalog/*` y `/api/p
 ## Desarrollo local
 
 La variante debug acepta servidores y señales HTTP para pruebas. La versión release exige HTTPS por defecto; para un proveedor heredado compílala con `-PALLOW_HTTP_STREAMS=true`. HTTP no cifra la señal ni las credenciales.
+
+## Diagnóstico de canales Xtream
+
+La versión `1.1.0-test` prueba automáticamente los transportes disponibles y muestra el formato, resolución y códecs detectados. Cuando el servidor admite ambas rutas aparecen los botones **Probar HLS** y **Probar TS**. Un contenido se agrega a **Recientes** solo después de mostrar el primer fotograma.
+
+Desde el importador Xtream del panel se puede elegir el formato preferido y agregar `User-Agent` o `Referer` únicamente cuando el proveedor autorizado los requiera.

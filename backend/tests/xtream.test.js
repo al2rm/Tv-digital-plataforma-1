@@ -11,7 +11,10 @@ const {
   decryptXtreamSecret,
   encryptXtreamSecret,
   loadXtreamStreams,
+  normalizePlaybackPreferences,
   normalizeXtreamBaseUrl,
+  preferredXtreamContainer,
+  providerPlaybackHeaders,
   validateXtreamAccount
 } = await import("../src/services/xtream.service.js");
 
@@ -19,6 +22,26 @@ test("cifra y descifra credenciales Xtream", () => {
   const encrypted = encryptXtreamSecret("clave-temporal");
   assert.notEqual(encrypted, "clave-temporal");
   assert.equal(decryptXtreamSecret(encrypted), "clave-temporal");
+});
+
+test("normaliza las preferencias de reproducción autorizadas", () => {
+  assert.deepEqual(normalizePlaybackPreferences({
+    userAgent: "TV Digital Test/1.0",
+    referer: "https://portal.example/player",
+    preferredOutput: "m3u8"
+  }), {
+    userAgent: "TV Digital Test/1.0",
+    referer: "https://portal.example/player",
+    preferredOutput: "m3u8"
+  });
+  assert.deepEqual(providerPlaybackHeaders({ user_agent: "Agent", referer: "https://portal.example/" }), {
+    "User-Agent": "Agent",
+    Referer: "https://portal.example/"
+  });
+  assert.equal(preferredXtreamContainer({ preferred_output: "m3u8" }, "ts"), "m3u8");
+  assert.equal(preferredXtreamContainer({ preferred_output: "auto" }, "ts"), "ts");
+  assert.throws(() => normalizePlaybackPreferences({ userAgent: "bad\nheader" }), /no es válido/);
+  assert.throws(() => normalizePlaybackPreferences({ referer: "javascript:alert(1)" }), /no es una URL/);
 });
 
 test("normaliza el servidor Xtream sin credenciales en la URL", () => {
@@ -62,4 +85,3 @@ test("rechaza respuestas que no son JSON", async () => {
     /respuesta inválida/
   );
 });
-

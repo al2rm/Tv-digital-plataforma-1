@@ -87,19 +87,23 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
    return originalFetch(input,options);
   };
   try{
-   const connected=await request('/admin/v2/content/import/xtream/providers',{method:'POST',token:admin,body:{name:'Proveedor prueba',baseUrl:'http://8.8.8.8',username:'trial-user',password:'trial-password'}});
+   const connected=await request('/admin/v2/content/import/xtream/providers',{method:'POST',token:admin,body:{
+    name:'Proveedor prueba',baseUrl:'http://8.8.8.8',username:'trial-user',password:'trial-password',
+    preferredOutput:'m3u8',userAgent:'TV Digital Test/1.0',referer:'https://portal.example/player'
+   }});
    assert.equal(connected.status,201);const provider=connected.data.provider;
    const preview=await request(`/admin/v2/content/import/xtream/providers/${provider.id}/streams`,{token:admin});
    assert.equal(preview.status,200);assert.equal(preview.data.items[0].streamId,42);
    const imported=await request(`/admin/v2/content/import/xtream/providers/${provider.id}/import`,{method:'POST',token:admin,body:{streamIds:[42]}});
    assert.equal(imported.status,201);assert.equal(imported.data.imported.length,1);
    const playback=await request(`/playback/session/channel:${imported.data.imported[0].id}`,{token:admin});
-   assert.equal(playback.status,200);assert.match(playback.data.manifestUrl,/\/api\/xtream\/stream\/\d+\.ts\?token=/);
+   assert.equal(playback.status,200);assert.match(playback.data.manifestUrl,/\/api\/xtream\/stream\/\d+\.m3u8\?token=/);
+   assert.deepEqual(playback.data.streamHeaders,{'User-Agent':'TV Digital Test/1.0',Referer:'https://portal.example/player'});
    assert.equal(JSON.stringify(playback.data).includes('trial-user'),false);
    assert.equal(JSON.stringify(playback.data).includes('trial-password'),false);
    const redirect=await originalFetch(playback.data.manifestUrl,{redirect:'manual'});
    assert.equal(redirect.status,302);
-   assert.match(redirect.headers.get('location'),/\/live\/trial-user\/trial-password\/42\.ts$/);
+   assert.match(redirect.headers.get('location'),/\/live\/trial-user\/trial-password\/42\.m3u8$/);
   }finally{globalThis.fetch=originalFetch;}
  });
  await t.test('suscripción activa permite reproducir y devuelve estado de cuenta',async()=>{

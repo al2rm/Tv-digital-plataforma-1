@@ -25,16 +25,37 @@ data class PlaybackSession(
         if (drm != null) return listOf(this)
 
         val hlsUrl = manifestUrl.replace(MPEG_TS_SUFFIX, ".m3u8")
-        if (hlsUrl == manifestUrl) return listOf(this)
+        if (hlsUrl != manifestUrl) {
+            val hls = copy(manifestUrl = hlsUrl, mimeType = HLS_MIME_TYPE)
+            val transportStream = copy(mimeType = MPEG_TS_MIME_TYPE)
+            return if (mimeType.equals(MPEG_TS_MIME_TYPE, ignoreCase = true)) {
+                listOf(transportStream, hls)
+            } else {
+                listOf(hls, transportStream)
+            }
+        }
 
-        return listOf(
-            copy(manifestUrl = hlsUrl, mimeType = HLS_MIME_TYPE),
-            copy(mimeType = mimeType ?: MPEG_TS_MIME_TYPE)
-        )
+        val transportStreamUrl = manifestUrl.replace(HLS_SUFFIX, ".ts")
+        if (transportStreamUrl != manifestUrl) {
+            return listOf(
+                copy(mimeType = HLS_MIME_TYPE),
+                copy(manifestUrl = transportStreamUrl, mimeType = MPEG_TS_MIME_TYPE)
+            )
+        }
+
+        return listOf(this)
+    }
+
+    fun formatLabel(): String = when {
+        mimeType.equals(HLS_MIME_TYPE, ignoreCase = true) || HLS_SUFFIX.containsMatchIn(manifestUrl) -> "HLS"
+        mimeType.equals(MPEG_TS_MIME_TYPE, ignoreCase = true) || MPEG_TS_SUFFIX.containsMatchIn(manifestUrl) -> "TS"
+        mimeType.equals("application/dash+xml", ignoreCase = true) -> "DASH"
+        else -> "Automático"
     }
 
     companion object {
         private val MPEG_TS_SUFFIX = Regex("(?i)\\.ts(?=([?#]|$))")
+        private val HLS_SUFFIX = Regex("(?i)\\.m3u8(?=([?#]|$))")
         private const val HLS_MIME_TYPE = "application/x-mpegURL"
         private const val MPEG_TS_MIME_TYPE = "video/mp2t"
 
