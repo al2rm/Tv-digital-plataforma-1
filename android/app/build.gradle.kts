@@ -15,6 +15,7 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["usesCleartextTraffic"] = "false"
     }
 
     buildTypes {
@@ -23,6 +24,8 @@ android {
                 .orElse("http://10.0.2.2:3000/")
                 .get()
             buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
+            buildConfigField("boolean", "ALLOW_HTTP_STREAMS", "true")
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
             isMinifyEnabled = true
@@ -30,6 +33,11 @@ android {
                 .orElse("https://example.invalid/")
                 .get()
             buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
+            val allowHttpStreams = providers.gradleProperty("ALLOW_HTTP_STREAMS")
+                .orElse("false")
+                .get()
+            buildConfigField("boolean", "ALLOW_HTTP_STREAMS", allowHttpStreams)
+            manifestPlaceholders["usesCleartextTraffic"] = allowHttpStreams
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

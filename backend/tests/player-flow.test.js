@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile,readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 process.env.NODE_ENV='test';
+process.env.ALLOW_HTTP_STREAMS='true';
 const {pool}=await import('../src/database/db.js');
 const {hashPassword}=await import('../src/services/auth.service.js');
 const {default:app}=await import('../src/app.js');
@@ -76,7 +77,9 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   const playback=await request(`/playback/session/channel:${content.id}`,{token:client});assert.equal(playback.status,200);assert.equal(playback.data.manifestUrl,'https://example.test/demo.m3u8');
  });
  await t.test('HTTPS, DRM y ocultación se validan',async()=>{
-  const invalid=await request('/admin/v2/content/movies',{method:'POST',token:admin,body:{titulo:'Invalid',manifest_url:'http://example.test/video.mp4'}});assert.equal(invalid.status,400);
+  const cleartext=await request('/admin/v2/content/movies',{method:'POST',token:admin,body:{titulo:'HTTP permitido',manifest_url:'http://example.test/video.mp4'}});assert.equal(cleartext.status,201);
+  const cleartextPlayback=await request(`/playback/session/movie:${cleartext.data.id}`,{token:admin});assert.equal(cleartextPlayback.status,200);assert.equal(cleartextPlayback.data.manifestUrl,'http://example.test/video.mp4');
+  const invalid=await request('/admin/v2/content/movies',{method:'POST',token:admin,body:{titulo:'Invalid',manifest_url:'ftp://example.test/video.mp4'}});assert.equal(invalid.status,400);
   const missingLicense=await request('/admin/v2/content/movies',{method:'POST',token:admin,body:{titulo:'DRM',drm_type:'widevine'}});assert.equal(missingLicense.status,400);
   assert.equal((await request(`/admin/v2/content/live_channels/${content.id}`,{method:'PUT',token:admin,body:{nombre:'Canal actualizado',activo:false}})).status,200);
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,404);

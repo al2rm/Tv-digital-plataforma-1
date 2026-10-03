@@ -17,6 +17,7 @@ export const env = {
   corsOrigins: [...new Set(corsOrigins)],
   serveAdmin: process.env.SERVE_ADMIN === "true",
   adminDistPath: process.env.ADMIN_DIST_PATH || "",
+  allowHttpStreams: process.env.ALLOW_HTTP_STREAMS === "true",
   automation: {
     workerEnabled: process.env.AUTOMATION_WORKER_ENABLED === "true",
     intervalMs: Number(process.env.AUTOMATION_WORKER_INTERVAL_MS || 60000),

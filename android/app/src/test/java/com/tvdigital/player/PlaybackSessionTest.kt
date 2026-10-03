@@ -38,14 +38,20 @@ class PlaybackSessionTest {
         assertNull(PlaybackSession.demo().drm)
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun rejectsCleartextManifest() {
-        PlaybackSession(
+    @Test
+    fun acceptsCleartextManifestInTrialBuild() {
+        val session = PlaybackSession(
             contentId = "unsafe",
             manifestUrl = "http://example.test/video.mpd",
             mimeType = null,
             streamHeaders = emptyMap(),
             drm = null
         )
+        assertEquals("http://example.test/video.mpd", session.manifestUrl)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun secureModeRejectsCleartextManifest() {
+        requirePlaybackUrl("http://example.test/video.mpd", "manifestUrl", false)
     }
 }

@@ -11,8 +11,8 @@ data class PlaybackSession(
     val drm: DrmConfig?
 ) {
     init {
-        requireHttps(manifestUrl, "manifestUrl")
-        drm?.let { requireHttps(it.licenseUrl, "licenseUrl") }
+        requirePlaybackUrl(manifestUrl, "manifestUrl", BuildConfig.ALLOW_HTTP_STREAMS)
+        drm?.let { requirePlaybackUrl(it.licenseUrl, "licenseUrl", false) }
     }
 
     data class DrmConfig(
@@ -56,11 +56,14 @@ data class PlaybackSession(
             return keys().asSequence().associateWith { getString(it) }
         }
 
-        private fun requireHttps(url: String, field: String) {
-            val uri = runCatching { URI(url) }.getOrNull()
-            require(uri?.scheme.equals("https", ignoreCase = true) && !uri?.host.isNullOrBlank()) {
-                "$field debe usar HTTPS"
-            }
-        }
+    }
+}
+
+internal fun requirePlaybackUrl(url: String, field: String, allowHttp: Boolean) {
+    val uri = runCatching { URI(url) }.getOrNull()
+    val protocolAllowed = uri?.scheme.equals("https", ignoreCase = true) ||
+        (allowHttp && uri?.scheme.equals("http", ignoreCase = true))
+    require(protocolAllowed && !uri?.host.isNullOrBlank() && uri?.userInfo == null) {
+        "$field debe usar ${if (allowHttp) "HTTP o HTTPS" else "HTTPS"}"
     }
 }

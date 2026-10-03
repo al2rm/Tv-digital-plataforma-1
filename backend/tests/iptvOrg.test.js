@@ -28,6 +28,7 @@ test("interpreta canales, metadatos y cabeceras permitidas de una lista M3U", ()
   });
   assert.match(channels[0].sourceId, /^[a-f0-9]{32}$/);
   assert.equal(channels[1].compatible, false);
+  assert.equal(parseM3u(playlist, { allowHttp: true })[1].compatible, true);
 });
 
 test("construye únicamente rutas de países válidas", () => {
@@ -57,6 +58,7 @@ test("bloquea destinos privados y permite un host público resuelto", async () =
     lookupImpl: async () => [{ address: "8.8.8.8", family: 4 }]
   });
   assert.equal(url, "https://video.test/live.m3u8");
+  assert.equal(await assertPublicChannelUrl("http://8.8.8.8/live.m3u8", { allowHttp: true }), "http://8.8.8.8/live.m3u8");
 });
 
 test("comprueba que la fuente devuelva un manifiesto HLS reproducible", async () => {
@@ -89,7 +91,14 @@ test("rechaza respuestas que no son HLS y segmentos que degradan a HTTP", async 
     fetchImpl: async () => new Response("#EXTM3U\nhttp://video.test/segment.ts", { status: 200 })
   });
   assert.equal(insecure.available, false);
-  assert.match(insecure.reason, /sin HTTPS/);
+  assert.match(insecure.reason, /fuera de HTTPS/);
+
+  const allowedForTrial = await probeChannel(channel, {
+    allowHttp: true,
+    lookupImpl,
+    fetchImpl: async () => new Response("#EXTM3U\nhttp://video.test/segment.ts", { status: 200 })
+  });
+  assert.equal(allowedForTrial.available, true);
 });
 
 test("valida cada redirección antes de seguirla", async () => {

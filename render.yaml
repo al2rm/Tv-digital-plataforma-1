@@ -23,6 +23,8 @@ services:
         value: "true"
       - key: VITE_API_URL
         value: /api
+      - key: ALLOW_HTTP_STREAMS
+        value: "true"
       - key: WHATSAPP_MODE
         value: assisted
       - key: WHATSAPP_DEFAULT_COUNTRY_CODE
