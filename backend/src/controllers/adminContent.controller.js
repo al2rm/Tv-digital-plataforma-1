@@ -1,4 +1,5 @@
 import { pool } from '../database/db.js';
+import { env } from '../config/env.js';
 const allowed={
  movies:['category_id','titulo','descripcion','poster_url','banner_url','manifest_url','license_url','drm_type','anio','duracion_min','clasificacion','destacado','activo'],
  series:['category_id','titulo','descripcion','poster_url','banner_url','anio','clasificacion','destacado','activo'],
@@ -14,8 +15,9 @@ function validate(kind,body){
  if(kind==='categories'&&!/^[a-z0-9-]+$/.test(body.slug||''))throw fail('El identificador debe usar letras minúsculas, números o guiones');
  for(const key of ['manifest_url','license_url','logo_url','poster_url','banner_url']){
   if(!body[key])continue;
-  try{const u=new URL(body[key]);if(u.protocol!=='https:'||u.username||u.password)throw new Error();}
-  catch{throw fail(`${key}: utiliza una URL HTTPS sin credenciales`);}
+  const allowHttp=env.allowHttpStreams&&key!=='license_url';
+  try{const u=new URL(body[key]);if(!(u.protocol==='https:'||(allowHttp&&u.protocol==='http:'))||u.username||u.password)throw new Error();}
+  catch{throw fail(`${key}: utiliza una URL ${allowHttp?'HTTP o HTTPS':'HTTPS'} sin credenciales`);}
  }
  if(body.drm_type&&!['none','widevine'].includes(body.drm_type))throw fail('DRM no compatible');
  if(body.drm_type==='widevine'&&!body.license_url)throw fail('Widevine requiere una URL de licencia');
