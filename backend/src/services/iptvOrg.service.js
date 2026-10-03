@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { env } from "../config/env.js";
 
 export const IPTV_ORG_COUNTRIES_URL = "https://iptv-org.github.io/api/countries.json";
 export const IPTV_ORG_COUNTRY_BASE_URL = "https://iptv-org.github.io/iptv/countries";
@@ -27,10 +28,11 @@ const parseAttributes = (line) => {
   return attributes;
 };
 
-const httpsUrl = (value) => {
+const safeUrl = (value, allowHttp = env.allowHttpStreams) => {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password ? url.href : null;
+    const protocolAllowed = url.protocol === "https:" || (allowHttp && url.protocol === "http:");
+    return protocolAllowed && !url.username && !url.password ? url.href : null;
   } catch {
     return null;
   }
@@ -41,7 +43,7 @@ const sourceIdFor = (channel) => createHash("sha256")
   .digest("hex")
   .slice(0, 32);
 
-export const parseM3u = (text) => {
+export const parseM3u = (text, { allowHttp = env.allowHttpStreams } = {}) => {
   const channels = [];
   let current = null;
 
@@ -54,7 +56,7 @@ export const parseM3u = (text) => {
       current = {
         tvgId: String(attributes["tvg-id"] || "").trim(),
         name: String(comma >= 0 ? line.slice(comma + 1) : attributes["tvg-name"] || "Canal sin nombre").trim(),
-        logoUrl: httpsUrl(attributes["tvg-logo"] || ""),
+        logoUrl: safeUrl(attributes["tvg-logo"] || "", allowHttp),
         group: String(attributes["group-title"] || "Sin categoría").trim() || "Sin categoría",
         headers: {}
       };
@@ -62,7 +64,7 @@ export const parseM3u = (text) => {
     }
     if (!current) continue;
     if (line.startsWith("#EXTVLCOPT:http-referrer=")) {
-      const referer = httpsUrl(line.slice("#EXTVLCOPT:http-referrer=".length));
+      const referer = safeUrl(line.slice("#EXTVLCOPT:http-referrer=".length), allowHttp);
       if (referer) current.headers.Referer = referer;
       continue;
     }
@@ -73,13 +75,13 @@ export const parseM3u = (text) => {
     }
     if (line.startsWith("#")) continue;
 
-    const manifestUrl = httpsUrl(line);
+    const manifestUrl = safeUrl(line, allowHttp);
     const channel = {
       ...current,
       rawUrl: line,
       manifestUrl,
       compatible: Boolean(manifestUrl),
-      incompatibilityReason: manifestUrl ? null : "La fuente no usa HTTPS o la URL no es válida"
+      incompatibilityReason: manifestUrl ? null : `La fuente no usa ${allowHttp?'HTTP/HTTPS':'HTTPS'} o la URL no es válida`
     };
     channel.sourceId = sourceIdFor(channel);
     channels.push(channel);
@@ -162,9 +164,9 @@ const isPrivateAddress = (address) => {
     value.startsWith("fd") || /^fe[89ab]/.test(value) || value.startsWith("ff");
 };
 
-export const assertPublicChannelUrl = async (value, { lookupImpl = lookup } = {}) => {
-  const manifestUrl = httpsUrl(value);
-  if (!manifestUrl) throw fail("La fuente no usa una URL HTTPS válida", 400);
+export const assertPublicChannelUrl = async (value, { lookupImpl = lookup, allowHttp = env.allowHttpStreams } = {}) => {
+  const manifestUrl = safeUrl(value, allowHttp);
+  if (!manifestUrl) throw fail(`La fuente no usa una URL ${allowHttp?'HTTP/HTTPS':'HTTPS'} válida`, 400);
   const { hostname } = new URL(manifestUrl);
   const lower = hostname.toLowerCase();
   if (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".local") || lower.endsWith(".internal")) {
@@ -185,8 +187,8 @@ const closeBody = async (response) => {
 
 const redirectStatus = (status) => [301, 302, 303, 307, 308].includes(status);
 
-const fetchChannelManifest = async (channel, { fetchImpl, lookupImpl }) => {
-  let url = await assertPublicChannelUrl(channel.manifestUrl, { lookupImpl });
+const fetchChannelManifest = async (channel, { fetchImpl, lookupImpl, allowHttp }) => {
+  let url = await assertPublicChannelUrl(channel.manifestUrl, { lookupImpl, allowHttp });
   for (let redirects = 0; redirects <= 3; redirects += 1) {
     const response = await fetchImpl(url, {
       method: "GET",
@@ -203,12 +205,12 @@ const fetchChannelManifest = async (channel, { fetchImpl, lookupImpl }) => {
     await closeBody(response);
     if (!location) throw fail("La fuente redirigió sin indicar un destino", 400);
     if (redirects === 3) throw fail("La fuente realizó demasiadas redirecciones", 400);
-    url = await assertPublicChannelUrl(new URL(location, url).href, { lookupImpl });
+    url = await assertPublicChannelUrl(new URL(location, url).href, { lookupImpl, allowHttp });
   }
   throw fail("La fuente realizó demasiadas redirecciones", 400);
 };
 
-const validateHlsManifest = (text, manifestUrl) => {
+const validateHlsManifest = (text, manifestUrl, allowHttp) => {
   const normalized = String(text || "").replace(/\r/g, "").trim();
   if (!normalized.startsWith("#EXTM3U")) return "La respuesta no es un manifiesto HLS válido";
 
@@ -223,8 +225,9 @@ const validateHlsManifest = (text, manifestUrl) => {
 
   for (const reference of references) {
     try {
-      if (new URL(reference, manifestUrl).protocol !== "https:") {
-        return "El manifiesto referencia contenido sin HTTPS";
+      const protocol = new URL(reference, manifestUrl).protocol;
+      if (!(protocol === "https:" || (allowHttp && protocol === "http:"))) {
+        return `El manifiesto referencia contenido fuera de ${allowHttp?'HTTP/HTTPS':'HTTPS'}`;
       }
     } catch {
       return "El manifiesto HLS contiene una referencia inválida";
@@ -233,12 +236,12 @@ const validateHlsManifest = (text, manifestUrl) => {
   return null;
 };
 
-export const probeChannel = async (channel, { fetchImpl = fetch, lookupImpl = lookup } = {}) => {
+export const probeChannel = async (channel, { fetchImpl = fetch, lookupImpl = lookup, allowHttp = env.allowHttpStreams } = {}) => {
   try {
-    const { response, url } = await fetchChannelManifest(channel, { fetchImpl, lookupImpl });
+    const { response, url } = await fetchChannelManifest(channel, { fetchImpl, lookupImpl, allowHttp });
     if (!response.ok) return { available: false, reason: `La fuente respondió ${response.status}` };
     const text = await readLimitedText(response, 128 * 1024, "El manifiesto supera el tamaño permitido");
-    const reason = validateHlsManifest(text, url);
+    const reason = validateHlsManifest(text, url, allowHttp);
     return reason ? { available: false, reason } : { available: true };
   } catch (error) {
     return { available: false, reason: error.statusCode ? error.message : "La fuente no respondió a tiempo" };
