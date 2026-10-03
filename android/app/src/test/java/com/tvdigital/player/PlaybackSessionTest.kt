@@ -84,7 +84,25 @@ class PlaybackSessionTest {
             drm = null
         )
 
-        assertEquals(listOf(session), session.playbackCandidates())
+        val candidates = session.playbackCandidates()
+        assertEquals(2, candidates.size)
+        assertEquals("HLS", candidates[0].formatLabel())
+        assertEquals("http://provider.example/live/channel.ts?token=short", candidates[1].manifestUrl)
+        assertEquals("TS", candidates[1].formatLabel())
+    }
+
+    @Test
+    fun respectsExplicitTsPreference() {
+        val session = PlaybackSession(
+            contentId = "canal-ts",
+            manifestUrl = "http://provider.example/live/channel.ts?token=short",
+            mimeType = "video/mp2t",
+            streamHeaders = emptyMap(),
+            drm = null
+        )
+
+        assertEquals("TS", session.playbackCandidates()[0].formatLabel())
+        assertEquals("HLS", session.playbackCandidates()[1].formatLabel())
     }
 
     @Test

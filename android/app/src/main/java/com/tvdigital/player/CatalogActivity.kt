@@ -20,12 +20,15 @@ class CatalogActivity : Activity() {
     private var categories = emptyList<Category>()
     private var channels = emptyList<Channel>()
     private var spinnerInitialized = false
-    private var favoritesOnly = false
+    private var filterMode = FilterMode.ALL
     private var canPlay = false
     private var generation = 0
     private val preferences by lazy { getSharedPreferences("favorites", MODE_PRIVATE) }
     private val favoriteKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}"
+    private val historyPreferences by lazy { getSharedPreferences("history", MODE_PRIVATE) }
+    private val historyKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}"
     private fun favorites() = preferences.getStringSet(favoriteKey, emptySet()).orEmpty().toSet()
+    private fun history() = HistoryCodec.decode(historyPreferences.getString(historyKey, ""))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,8 +43,13 @@ class CatalogActivity : Activity() {
         }
         binding.logoutButton.setOnClickListener { logout() }
         binding.favoritesButton.setOnClickListener {
-            favoritesOnly = !favoritesOnly
-            binding.favoritesButton.text = if (favoritesOnly) "Ver todo" else "Ver favoritos"
+            filterMode = if (filterMode == FilterMode.FAVORITES) FilterMode.ALL else FilterMode.FAVORITES
+            updateFilterButtons()
+            showChannels()
+        }
+        binding.historyButton.setOnClickListener {
+            filterMode = if (filterMode == FilterMode.HISTORY) FilterMode.ALL else FilterMode.HISTORY
+            updateFilterButtons()
             showChannels()
         }
         executor.execute {
@@ -85,11 +93,23 @@ class CatalogActivity : Activity() {
     }
     private fun showChannels() {
         val ids = favorites()
-        val shown = if (favoritesOnly) channels.filter { it.groupId in ids } else channels
+        val recent = history()
+        val shown = when (filterMode) {
+            FilterMode.ALL -> channels
+            FilterMode.FAVORITES -> channels.filter { it.groupId in ids }
+            FilterMode.HISTORY -> {
+                val byId = channels.associateBy(Channel::groupId)
+                recent.mapNotNull(byId::get)
+            }
+        }
         channelAdapter.submitList(shown, ids)
         binding.loading.visibility = View.GONE
         binding.emptyState.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
         binding.catalogStatus.text = "${shown.size} contenidos disponibles"
+    }
+    private fun updateFilterButtons() {
+        binding.favoritesButton.text = if (filterMode == FilterMode.FAVORITES) "Ver todo" else "Favoritos"
+        binding.historyButton.text = if (filterMode == FilterMode.HISTORY) "Ver todo" else "Recientes"
     }
     private fun toggleFavorite(channel: Channel) {
         val ids = favorites().toMutableSet()
@@ -112,4 +132,7 @@ class CatalogActivity : Activity() {
         finish()
     }
     override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
+    override fun onResume() { super.onResume(); if (::binding.isInitialized) showChannels() }
+
+    private enum class FilterMode { ALL, FAVORITES, HISTORY }
 }

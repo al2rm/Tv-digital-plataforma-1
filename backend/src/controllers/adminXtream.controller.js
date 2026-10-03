@@ -3,6 +3,7 @@ import {
   encryptXtreamSecret,
   loadXtreamCategories,
   loadXtreamStreams,
+  normalizePlaybackPreferences,
   normalizeXtreamBaseUrl,
   validateXtreamAccount
 } from "../services/xtream.service.js";
@@ -24,6 +25,9 @@ const publicProvider = (row) => ({
   status: row.account_status,
   expiresAt: row.expires_at,
   maxConnections: row.max_connections,
+  userAgent: row.user_agent || "",
+  referer: row.referer || "",
+  preferredOutput: row.preferred_output || "auto",
   active: row.activo,
   createdAt: row.fecha_creacion
 });
@@ -44,18 +48,23 @@ export const createXtreamProvider = async (req, res, next) => {
       throw fail("Completa nombre, servidor, usuario y contraseña");
     }
     const baseUrl = normalizeXtreamBaseUrl(req.body.baseUrl);
-    const account = await validateXtreamAccount({ baseUrl, username, password });
+    const playback = normalizePlaybackPreferences(req.body);
+    const account = await validateXtreamAccount({ baseUrl, username, password, ...playback });
     if (!account.status.toLowerCase().includes("active")) throw fail(`La cuenta Xtream está ${account.status}`, 409);
     const result = await pool.query(`INSERT INTO xtream_providers
-      (nombre,base_url,username_encrypted,password_encrypted,account_status,expires_at,max_connections,activo)
-      VALUES($1,$2,$3,$4,$5,$6,$7,TRUE) RETURNING *`, [
+      (nombre,base_url,username_encrypted,password_encrypted,account_status,expires_at,max_connections,
+       user_agent,referer,preferred_output,activo)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,TRUE) RETURNING *`, [
       name,
       baseUrl,
       encryptXtreamSecret(username),
       encryptXtreamSecret(password),
       account.status,
       account.expiresAt,
-      account.maxConnections || null
+      account.maxConnections || null,
+      playback.userAgent,
+      playback.referer,
+      playback.preferredOutput
     ]);
     res.status(201).json({ ok: true, data: { provider: publicProvider(result.rows[0]), account } });
   } catch (error) { next(error); }
@@ -157,4 +166,3 @@ export const importXtreamStreams = async (req, res, next) => {
     res.status(201).json({ ok: true, data: { imported } });
   } catch (error) { next(error); }
 };
-

@@ -42,6 +42,38 @@
             android:textColor="#CBD5E1"
             android:textSize="14sp" />
 
+        <TextView
+            android:id="@+id/diagnosticText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Diagnóstico pendiente"
+            android:textColor="#38BDF8"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/hlsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Probar HLS"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/tsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Probar TS"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/playButton"
             android:layout_width="match_parent"

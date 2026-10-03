@@ -5,6 +5,8 @@ import { env } from '../config/env.js';
 import { assertPublicChannelUrl } from '../services/iptvOrg.service.js';
 import {
  buildXtreamStreamUrl,
+ preferredXtreamContainer,
+ providerPlaybackHeaders,
  signXtreamPlayback,
  verifyXtreamPlayback
 } from '../services/xtream.service.js';
@@ -15,7 +17,8 @@ router.get('/xtream/stream/:channelId.:extension',async(req,res,next)=>{
  try {
   if(!['ts','m3u8'].includes(req.params.extension))throw fail('Formato Xtream inválido');
   verifyXtreamPlayback(req.query.token,req.params.channelId);
-  const result=await pool.query(`SELECT c.xtream_stream_id,p.base_url,p.username_encrypted,p.password_encrypted
+  const result=await pool.query(`SELECT c.xtream_stream_id,p.base_url,p.username_encrypted,p.password_encrypted,
+   p.user_agent,p.referer,p.preferred_output
    FROM live_channels c JOIN xtream_providers p ON p.id=c.xtream_provider_id
    WHERE c.id=$1 AND c.activo AND p.activo`,[req.params.channelId]);
   const channel=result.rows[0];
@@ -73,7 +76,7 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
   if(!match) throw fail('Contenido inválido');
   const table=match[1]==='channel'?'live_channels':'movies';
   const providerColumns=table==='live_channels'?`,c.xtream_provider_id,c.xtream_stream_id,c.xtream_container,
-   p.base_url,p.username_encrypted,p.password_encrypted`:'';
+   p.base_url,p.username_encrypted,p.password_encrypted,p.user_agent,p.referer,p.preferred_output`:'';
   const providerJoin=table==='live_channels'?' LEFT JOIN xtream_providers p ON p.id=c.xtream_provider_id AND p.activo':'';
   const result=await pool.query(`SELECT c.manifest_url,c.license_url,c.drm_type,c.stream_headers${providerColumns}
    FROM ${table} c LEFT JOIN categories k ON k.id=c.category_id${providerJoin}
@@ -85,8 +88,9 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
    if(!content.base_url)throw fail('El proveedor Xtream está inactivo',409);
    const token=signXtreamPlayback({channelId:match[2],userId:req.auth.userId});
    const origin=(env.publicBaseUrl||`${req.protocol}://${req.get('host')}`).replace(/\/$/,'');
-   manifest=`${origin}/api/xtream/stream/${match[2]}.ts?token=${encodeURIComponent(token)}`;
-   mimeType=null;
+   const container=preferredXtreamContainer(content,content.xtream_container);
+   manifest=`${origin}/api/xtream/stream/${match[2]}.${container}?token=${encodeURIComponent(token)}`;
+   mimeType=content.preferred_output==='auto'?null:container==='m3u8'?'application/x-mpegURL':'video/mp2t';
   }else{
    if(!content.manifest_url) throw fail('Este contenido todavía no tiene una fuente de reproducción configurada.',409);
    manifest=validMediaUrl(content.manifest_url,env.allowHttpStreams);
@@ -95,7 +99,7 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
   const license=content.drm_type==='widevine'?validMediaUrl(content.license_url,false):null;
   res.json({ok:true,data:{contentId:req.params.contentId,manifestUrl:manifest,
    mimeType,
-   streamHeaders:validStreamHeaders(content.stream_headers),drm:license?{scheme:'widevine',licenseUrl:license,licenseHeaders:{}}:null}});
+   streamHeaders:content.xtream_provider_id?providerPlaybackHeaders(content):validStreamHeaders(content.stream_headers),drm:license?{scheme:'widevine',licenseUrl:license,licenseHeaders:{}}:null}});
  }catch(e){next(e);}
 });
 function validMediaUrl(value,allowHttp=false){

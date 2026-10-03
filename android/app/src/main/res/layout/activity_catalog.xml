@@ -59,7 +59,8 @@
         android:popupBackground="#0F172A" />
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-    <Button android:id="@+id/favoritesButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Ver favoritos" />
+    <Button android:id="@+id/favoritesButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Favoritos" />
+    <Button android:id="@+id/historyButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Recientes" />
     <Button android:id="@+id/logoutButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Salir" />
     </LinearLayout>
     <ProgressBar
