@@ -21,7 +21,23 @@ data class PlaybackSession(
         val licenseHeaders: Map<String, String>
     )
 
+    fun playbackCandidates(): List<PlaybackSession> {
+        if (drm != null) return listOf(this)
+
+        val hlsUrl = manifestUrl.replace(MPEG_TS_SUFFIX, ".m3u8")
+        if (hlsUrl == manifestUrl) return listOf(this)
+
+        return listOf(
+            copy(manifestUrl = hlsUrl, mimeType = HLS_MIME_TYPE),
+            copy(mimeType = mimeType ?: MPEG_TS_MIME_TYPE)
+        )
+    }
+
     companion object {
+        private val MPEG_TS_SUFFIX = Regex("(?i)\\.ts(?=([?#]|$))")
+        private const val HLS_MIME_TYPE = "application/x-mpegURL"
+        private const val MPEG_TS_MIME_TYPE = "video/mp2t"
+
         fun fromApiResponse(rawJson: String): PlaybackSession {
             val root = JSONObject(rawJson)
             require(root.optBoolean("ok", false)) { root.optString("message", "Sesión rechazada") }
