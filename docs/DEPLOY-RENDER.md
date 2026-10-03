@@ -28,6 +28,11 @@ Esta configuración crea dos recursos gratuitos:
    servidor finalicen.
 6. Abre `/api/health` y luego la raíz del dominio para validar API y panel.
 
+El Blueprint también genera `XTREAM_CREDENTIALS_KEY`, utilizada para cifrar las
+credenciales de proveedores Xtream. No cambies esta clave después de conectar
+cuentas: si se reemplaza, las credenciales ya guardadas no podrán descifrarse y
+deberás volver a conectar el proveedor.
+
 ## Configurar el acceso administrativo personal
 
 Después de validar el despliegue, abre el servicio web en Render y entra en

@@ -4,6 +4,8 @@ import { readFile,readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 process.env.NODE_ENV='test';
 process.env.ALLOW_HTTP_STREAMS='true';
+process.env.JWT_SECRET='jwt-test-secret-long-enough';
+process.env.XTREAM_CREDENTIALS_KEY='xtream-test-secret-with-more-than-16-characters';
 const {pool}=await import('../src/database/db.js');
 const {hashPassword}=await import('../src/services/auth.service.js');
 const {default:app}=await import('../src/app.js');
@@ -68,6 +70,37 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal(catalog.data.items[0].groupId,`channel:${content.id}`);assert.equal(JSON.stringify(catalog.data).includes('manifest_url'),false);
   assert.equal((await request('/catalog/channels')).status,401);
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,403);
+ });
+ await t.test('conecta Xtream, importa por stream_id y entrega un enlace temporal sin credenciales',async()=>{
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async(input,options={})=>{
+   const target=new URL(String(input));
+   if(target.hostname==='8.8.8.8'){
+    const action=target.searchParams.get('action');
+    const data=action==='get_live_categories'
+     ?[{category_id:'7',category_name:'Noticias'}]
+     :action==='get_live_streams'
+      ?[{stream_id:'42',name:'Canal Xtream prueba',category_id:'7',container_extension:'ts',stream_icon:'https://example.test/logo.png'}]
+      :{user_info:{auth:1,status:'Active',exp_date:'1791032581',active_cons:'0',max_connections:'1',allowed_output_formats:['m3u8','ts']}};
+    return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
+   }
+   return originalFetch(input,options);
+  };
+  try{
+   const connected=await request('/admin/v2/content/import/xtream/providers',{method:'POST',token:admin,body:{name:'Proveedor prueba',baseUrl:'http://8.8.8.8',username:'trial-user',password:'trial-password'}});
+   assert.equal(connected.status,201);const provider=connected.data.provider;
+   const preview=await request(`/admin/v2/content/import/xtream/providers/${provider.id}/streams`,{token:admin});
+   assert.equal(preview.status,200);assert.equal(preview.data.items[0].streamId,42);
+   const imported=await request(`/admin/v2/content/import/xtream/providers/${provider.id}/import`,{method:'POST',token:admin,body:{streamIds:[42]}});
+   assert.equal(imported.status,201);assert.equal(imported.data.imported.length,1);
+   const playback=await request(`/playback/session/channel:${imported.data.imported[0].id}`,{token:admin});
+   assert.equal(playback.status,200);assert.match(playback.data.manifestUrl,/\/api\/xtream\/stream\/\d+\.ts\?token=/);
+   assert.equal(JSON.stringify(playback.data).includes('trial-user'),false);
+   assert.equal(JSON.stringify(playback.data).includes('trial-password'),false);
+   const redirect=await originalFetch(playback.data.manifestUrl,{redirect:'manual'});
+   assert.equal(redirect.status,302);
+   assert.match(redirect.headers.get('location'),/\/live\/trial-user\/trial-password\/42\.ts$/);
+  }finally{globalThis.fetch=originalFetch;}
  });
  await t.test('suscripción activa permite reproducir y devuelve estado de cuenta',async()=>{
   const date=(await query("SELECT TO_CHAR(NOW() AT TIME ZONE 'America/Asuncion','YYYY-MM-DD') AS date")).rows[0].date;
