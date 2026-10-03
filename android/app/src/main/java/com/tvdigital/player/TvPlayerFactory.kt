@@ -15,7 +15,7 @@ object TvPlayerFactory {
             .setUserAgent("TV Digital Android/1.0")
             .setConnectTimeoutMs(10_000)
             .setReadTimeoutMs(20_000)
-            .setAllowCrossProtocolRedirects(false)
+            .setAllowCrossProtocolRedirects(BuildConfig.ALLOW_HTTP_STREAMS)
             .setDefaultRequestProperties(session.streamHeaders)
 
         val mediaItemBuilder = MediaItem.Builder()
