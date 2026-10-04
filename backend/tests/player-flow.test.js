@@ -126,6 +126,19 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,404);
   await request(`/admin/v2/content/categories/${category.id}`,{method:'PUT',token:admin,body:{nombre:'Pruebas',slug:'pruebas',activo:true}});
  });
+ await t.test('elimina canales y categorías sin borrar contenido relacionado',async()=>{
+  const temporaryCategory=(await request('/admin/v2/content/categories',{method:'POST',token:admin,body:{nombre:'Temporal',slug:'temporal',activo:true}})).data;
+  const temporaryChannel=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Canal para eliminar',category_id:temporaryCategory.id,manifest_url:'https://example.test/delete.m3u8',activo:true}})).data;
+  const removedCategory=await request(`/admin/v2/content/categories/${temporaryCategory.id}`,{method:'DELETE',token:admin});
+  assert.equal(removedCategory.status,200);assert.equal(removedCategory.data.id,temporaryCategory.id);
+  const afterCategoryDelete=await request('/admin/v2/content/live_channels',{token:admin});
+  assert.equal(afterCategoryDelete.data.find(item=>item.id===temporaryChannel.id).category_id,null);
+  const removedChannel=await request(`/admin/v2/content/live_channels/${temporaryChannel.id}`,{method:'DELETE',token:admin});
+  assert.equal(removedChannel.status,200);assert.equal(removedChannel.data.id,temporaryChannel.id);
+  assert.equal((await request('/admin/v2/content/live_channels',{token:admin})).data.some(item=>item.id===temporaryChannel.id),false);
+  assert.equal((await request(`/playback/session/channel:${temporaryChannel.id}`,{token:client})).status,404);
+  assert.equal((await request(`/admin/v2/content/live_channels/${temporaryChannel.id}`,{method:'DELETE',token:admin})).status,404);
+ });
  await t.test('vencimiento y fecha futura bloquean nuevas reproducciones',async()=>{
   await query("UPDATE subscriptions SET fecha_inicio=(NOW() AT TIME ZONE 'America/Asuncion')::date-50,fecha_fin=(NOW() AT TIME ZONE 'America/Asuncion')::date-1 WHERE id=$1",[subscription.id]);
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,403);

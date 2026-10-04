@@ -34,5 +34,11 @@ export const updateContent=async(req,res,next)=>{try{
  validate(req.params.kind,req.body);const fields=fieldsFor(req.params.kind).filter(f=>req.body[f]!==undefined);
  const r=await pool.query(`UPDATE ${req.params.kind} SET ${fields.map((f,i)=>`${f}=$${i+1}`).join(',')} WHERE id=$${fields.length+1} RETURNING *`,[...fields.map(f=>req.body[f]),req.params.id]);
  if(!r.rowCount)return res.status(404).json({ok:false,message:'Contenido no encontrado'});res.json({ok:true,data:r.rows[0]});
+}catch(e){if(e.code==='23505')e=fail('Ya existe una categoría con ese identificador');next(e);}};
+export const deleteContent=async(req,res,next)=>{try{
+ fieldsFor(req.params.kind);
+ const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<=0)throw fail('Registro inválido');
+ const r=await pool.query(`DELETE FROM ${req.params.kind} WHERE id=$1 RETURNING *`,[id]);
+ if(!r.rowCount)return res.status(404).json({ok:false,message:'Registro no encontrado'});
+ res.json({ok:true,message:'Registro eliminado',data:r.rows[0]});
 }catch(e){next(e);}};
-export const disableContent=async(req,res,next)=>{try{fieldsFor(req.params.kind);const r=await pool.query(`UPDATE ${req.params.kind} SET activo=FALSE WHERE id=$1 RETURNING id`,[req.params.id]);if(!r.rowCount)return res.status(404).json({ok:false,message:'Registro no encontrado'});res.json({ok:true,message:'Registro desactivado'});}catch(e){next(e);}};

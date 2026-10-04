@@ -11,7 +11,7 @@ import {
   listSubscriptions,
   renewSubscription
 } from "../controllers/adminPayments.controller.js";
-import { listContent, createContent, updateContent, disableContent } from "../controllers/adminContent.controller.js";
+import { listContent, createContent, updateContent, deleteContent } from "../controllers/adminContent.controller.js";
 import {
   importCountryPlaylist,
   importParaguayPlaylist,
@@ -56,5 +56,5 @@ router.post("/content/import/xtream/providers/:providerId/import", importXtreamS
 router.get("/content/:kind", listContent);
 router.post("/content/:kind", createContent);
 router.put("/content/:kind/:id", updateContent);
-router.delete("/content/:kind/:id", disableContent);
+router.delete("/content/:kind/:id", deleteContent);
 export default router;
