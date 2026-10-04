@@ -1,12 +1,13 @@
 import { pool } from "../database/db.js";
 import {
   countryPlaylistUrl,
-  countrySource,
   loadCountryCatalog,
   loadCountryPlaylist,
   mapLimit,
   normalizeCountryCode,
-  probeChannel
+  probeChannel,
+  trialCountrySource,
+  trialEligibilityFor
 } from "../services/iptvOrg.service.js";
 
 const MAX_IMPORT_SELECTION = 50;
@@ -24,22 +25,27 @@ const resolveCountry = async (value) => {
 };
 
 const categoryFor = (country) => ({
-  name: country.name.slice(0, 120),
-  slug: country.code === "py" ? "paraguay" : `iptv-${country.code}`
+  name: `Prueba pública · ${country.name}`.slice(0, 120),
+  slug: `prueba-publica-${country.code}`
 });
 
-const publicChannel = (channel, existing) => ({
-  sourceId: channel.sourceId,
-  tvgId: channel.tvgId,
-  name: channel.name,
-  logoUrl: channel.logoUrl,
-  group: channel.group,
-  manifestHost: channel.manifestUrl ? new URL(channel.manifestUrl).hostname : null,
-  compatible: channel.compatible,
-  incompatibilityReason: channel.incompatibilityReason,
-  hasCustomHeaders: Object.keys(channel.headers).length > 0,
-  existing: channel.manifestUrl ? existing.has(channel.manifestUrl) : false
-});
+const publicChannel = (channel, existing, countryCode) => {
+  const trial = trialEligibilityFor(channel, countryCode);
+  return {
+    sourceId: channel.sourceId,
+    tvgId: channel.tvgId,
+    name: channel.name,
+    logoUrl: channel.logoUrl,
+    group: channel.group,
+    manifestHost: channel.manifestUrl ? new URL(channel.manifestUrl).hostname : null,
+    compatible: channel.compatible,
+    incompatibilityReason: channel.incompatibilityReason,
+    trialEligible: trial.eligible,
+    trialReason: trial.reason,
+    hasCustomHeaders: Object.keys(channel.headers).length > 0,
+    existing: channel.manifestUrl ? existing.has(channel.manifestUrl) : false
+  };
+};
 
 export const listIptvOrgCountries = async (req, res, next) => {
   try { res.json({ ok: true, data: await loadCountryCatalog() }); }
@@ -52,19 +58,25 @@ const previewCountry = async (countryCode, res) => {
     loadCountryPlaylist(country.code),
     existingUrls()
   ]);
-  const items = channels.map((channel) => publicChannel(channel, existing));
+  const items = channels.map((channel) => publicChannel(channel, existing, country.code));
   res.json({
     ok: true,
     data: {
       country,
-      source: { name: `iptv-org · ${country.name}`, url: countryPlaylistUrl(country.code) },
+      source: {
+        name: `iptv-org · ${country.name}`,
+        url: countryPlaylistUrl(country.code),
+        mode: "public_trial",
+        commercialRightsIncluded: false
+      },
       limits: { maxSelection: MAX_IMPORT_SELECTION },
       items,
       summary: {
         total: items.length,
-        importable: items.filter((item) => item.compatible && !item.existing).length,
+        importable: items.filter((item) => item.trialEligible && !item.existing).length,
+        trialEligible: items.filter((item) => item.trialEligible).length,
         existing: items.filter((item) => item.existing).length,
-        incompatible: items.filter((item) => !item.compatible).length
+        excluded: items.filter((item) => !item.trialEligible).length
       }
     }
   });
@@ -91,9 +103,12 @@ const importCountry = async (countryCode, sourceIds, res) => {
   const byId = new Map(channels.map((channel) => [channel.sourceId, channel]));
   const selected = sourceIds.map((id) => byId.get(id));
   if (selected.some((channel) => !channel)) throw fail("La lista cambió; vuelve a abrir la vista previa");
+  if (selected.some((channel) => !trialEligibilityFor(channel, country.code).eligible)) {
+    throw fail("Uno o más canales no cumplen los requisitos de la prueba pública; vuelve a abrir la vista previa");
+  }
 
   const existing = await existingUrls();
-  const candidates = selected.filter((channel) => channel.compatible && !existing.has(channel.manifestUrl));
+  const candidates = selected.filter((channel) => !existing.has(channel.manifestUrl));
   const checks = await mapLimit(candidates, 8, async (channel) => ({
     channel,
     ...await probeChannel(channel)
@@ -127,7 +142,7 @@ const importCountry = async (countryCode, sourceIds, res) => {
         channel.logoUrl,
         channel.manifestUrl,
         JSON.stringify(channel.headers),
-        countrySource(country.code),
+        trialCountrySource(country.code),
         channel.sourceId
       ]);
       if (result.rows[0]) imported.push(result.rows[0]);

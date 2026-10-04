@@ -19,6 +19,7 @@ export const countryPlaylistUrl = (countryCode) =>
   `${IPTV_ORG_COUNTRY_BASE_URL}/${normalizeCountryCode(countryCode)}.m3u`;
 
 export const countrySource = (countryCode) => `iptv-org-${normalizeCountryCode(countryCode)}`;
+export const trialCountrySource = (countryCode) => `iptv-org-trial-${normalizeCountryCode(countryCode)}`;
 
 const parseAttributes = (line) => {
   const attributes = {};
@@ -26,6 +27,15 @@ const parseAttributes = (line) => {
   let match;
   while ((match = expression.exec(line))) attributes[match[1]] = match[2];
   return attributes;
+};
+
+const metadataSeparator = (line) => {
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    if (line[index] === '"') quoted = !quoted;
+    else if (line[index] === "," && !quoted) return index;
+  }
+  return -1;
 };
 
 const safeUrl = (value, allowHttp = env.allowHttpStreams) => {
@@ -52,7 +62,7 @@ export const parseM3u = (text, { allowHttp = env.allowHttpStreams } = {}) => {
     if (!line) continue;
     if (line.startsWith("#EXTINF:")) {
       const attributes = parseAttributes(line);
-      const comma = line.indexOf(",");
+      const comma = metadataSeparator(line);
       current = {
         tvgId: String(attributes["tvg-id"] || "").trim(),
         name: String(comma >= 0 ? line.slice(comma + 1) : attributes["tvg-name"] || "Canal sin nombre").trim(),
@@ -89,6 +99,33 @@ export const parseM3u = (text, { allowHttp = env.allowHttpStreams } = {}) => {
   }
 
   return channels;
+};
+
+const tvgCountryCode = (tvgId) => {
+  const match = String(tvgId || "").match(/\.([a-z]{2})(?:@|$)/i);
+  return match ? match[1].toLowerCase() : null;
+};
+
+const PAY_TV_BRAND = /\b(?:adult\s*swim|amc|disney|espn|fox\s*sports|hbo(?:\s+max)?|paramount|star\s*channel|tigo\s*sports|warner)\b/i;
+
+export const trialEligibilityFor = (channel, countryCode) => {
+  const expectedCountry = normalizeCountryCode(countryCode);
+  if (!channel.compatible || !channel.manifestUrl) {
+    return { eligible: false, reason: channel.incompatibilityReason || "La fuente no es compatible" };
+  }
+  if (new URL(channel.manifestUrl).protocol !== "https:") {
+    return { eligible: false, reason: "La prueba pública admite únicamente señales HTTPS" };
+  }
+  if (tvgCountryCode(channel.tvgId) !== expectedCountry) {
+    return { eligible: false, reason: "La señal no pertenece al país seleccionado" };
+  }
+  if (/\[geo-?blocked\]/i.test(channel.name)) {
+    return { eligible: false, reason: "La señal está marcada como bloqueada geográficamente" };
+  }
+  if (PAY_TV_BRAND.test(`${channel.name} ${channel.group}`)) {
+    return { eligible: false, reason: "La señal parece pertenecer a una marca de televisión paga" };
+  }
+  return { eligible: true, reason: null };
 };
 
 const readLimitedText = async (response, maxBytes, oversizeMessage = "La lista de IPTV supera el tamaño permitido") => {
