@@ -6,7 +6,8 @@ import {
   loadCountryCatalog,
   normalizeCountryCode,
   parseM3u,
-  probeChannel
+  probeChannel,
+  trialEligibilityFor
 } from "../src/services/iptvOrg.service.js";
 
 const playlist = `#EXTM3U
@@ -35,6 +36,27 @@ test("construye únicamente rutas de países válidas", () => {
   assert.equal(normalizeCountryCode("AR"), "ar");
   assert.equal(countryPlaylistUrl("BR"), "https://iptv-org.github.io/iptv/countries/br.m3u");
   assert.throws(() => countryPlaylistUrl("../../admin"), /país seleccionado/);
+});
+
+test("el catálogo público de prueba admite solo señales locales por HTTPS", () => {
+  const local = parseM3u(playlist)[0];
+  assert.equal(trialEligibilityFor(local, "py").eligible, true);
+  assert.match(trialEligibilityFor(local, "ar").reason, /no pertenece/);
+
+  const httpLocal = parseM3u(`#EXTM3U\n#EXTINF:-1 tvg-id="Local.py",Local\nhttp://video.test/local.m3u8`, { allowHttp: true })[0];
+  assert.match(trialEligibilityFor(httpLocal, "py").reason, /únicamente señales HTTPS/);
+
+  const foreignPremium = parseM3u(`#EXTM3U\n#EXTINF:-1 tvg-id="Premium.us@Panregional",Premium\nhttps://video.test/premium.m3u8`)[0];
+  assert.match(trialEligibilityFor(foreignPremium, "py").reason, /no pertenece/);
+
+  const localPayTv = parseM3u(`#EXTM3U\n#EXTINF:-1 tvg-id="TigoSportsPlus.py@SD" group-title="Sports",Tigo Sports+\nhttps://video.test/tigo.m3u8`)[0];
+  assert.match(trialEligibilityFor(localPayTv, "py").reason, /televisión paga/);
+});
+
+test("encuentra el nombre aunque un atributo M3U contenga comas", () => {
+  const [channel] = parseM3u(`#EXTM3U\n#EXTINF:-1 tvg-id="Local.py" http-user-agent="Player, Browser" group-title="Noticias",Canal Local\nhttps://video.test/local.m3u8`);
+  assert.equal(channel.name, "Canal Local");
+  assert.equal(channel.group, "Noticias");
 });
 
 test("carga y traduce el catálogo de países de iptv-org", async () => {
