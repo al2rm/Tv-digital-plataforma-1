@@ -29,6 +29,11 @@ router.get('/xtream/stream/:channelId.:extension',async(req,res,next)=>{
  }catch(e){next(e);}
 });
 router.use(['/app','/catalog','/playback'],authMiddleware);
+router.use(['/app','/catalog'],(req,res,next)=>{
+ res.set('Cache-Control','private, no-store, max-age=0');
+ res.set('Pragma','no-cache');
+ next();
+});
 const catalogSql = `SELECT 'channel:' || c.id AS "groupId", c.nombre AS name,
  COALESCE(k.nombre,'TV en vivo') AS category, COALESCE(c.logo_url,'') AS logo,
  COALESCE(c.logo_url,'') AS "squareLogo", 'channel' AS kind
