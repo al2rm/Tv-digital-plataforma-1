@@ -23,6 +23,7 @@ class CatalogActivity : Activity() {
     private var filterMode = FilterMode.ALL
     private var canPlay = false
     private var generation = 0
+    private var firstResume = true
     private val preferences by lazy { getSharedPreferences("favorites", MODE_PRIVATE) }
     private val favoriteKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}"
     private val historyPreferences by lazy { getSharedPreferences("history", MODE_PRIVATE) }
@@ -38,6 +39,7 @@ class CatalogActivity : Activity() {
         binding.channelList.layoutManager = GridLayoutManager(this, if (resources.configuration.screenWidthDp >= 600) 4 else 2)
         binding.channelList.adapter = channelAdapter
         binding.searchButton.setOnClickListener { loadChannels() }
+        binding.refreshButton.setOnClickListener { refreshCatalog() }
         binding.searchInput.setOnEditorActionListener { _, action, _ ->
             if (action == EditorInfo.IME_ACTION_SEARCH) { loadChannels(); true } else false
         }
@@ -52,11 +54,25 @@ class CatalogActivity : Activity() {
             updateFilterButtons()
             showChannels()
         }
+        refreshCatalog()
+    }
+    private fun refreshCatalog() {
+        val current = ++generation
+        val selected = binding.categorySpinner.selectedItemPosition
+        val previousCategory = categories.getOrNull(selected - 1)?.name.orEmpty()
+        val search = binding.searchInput.text.toString()
+        binding.loading.visibility = View.VISIBLE
         executor.execute {
-            val result = runCatching { Triple(api.loadAccount(), api.loadCategories(), api.loadChannels()) }
+            val result = runCatching {
+                val account = api.loadAccount()
+                val groups = api.loadCategories()
+                val category = previousCategory.takeIf { previous -> groups.any { it.name == previous } }.orEmpty()
+                CatalogRefresh(account, groups, api.loadChannels(category, search), category)
+            }
             runOnUiThread {
-                if (isDestroyed || isFinishing) return@runOnUiThread
-                result.onSuccess { (account, groups, items) ->
+                if (isDestroyed || isFinishing || current != generation) return@runOnUiThread
+                result.onSuccess { refresh ->
+                    val account = refresh.account
                     canPlay = account.optBoolean("canPlay")
                     val end = account.optJSONObject("subscription")?.optString("vencimiento")
                     binding.accountStatus.text = "${SessionStore.name} · " + when {
@@ -64,14 +80,19 @@ class CatalogActivity : Activity() {
                         canPlay -> "Vista de administrador"
                         else -> "Sin suscripción activa"
                     }
-                    categories = groups; channels = items
-                    binding.categorySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Todas las categorías") + groups.map { it.name })
+                    categories = refresh.groups
+                    channels = refresh.items
+                    spinnerInitialized = false
+                    binding.categorySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Todas las categorías") + refresh.groups.map { it.name })
                     binding.categorySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                         override fun onNothingSelected(parent: AdapterView<*>?) = Unit
                         override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                             if (spinnerInitialized) loadChannels() else spinnerInitialized = true
                         }
                     }
+                    val categoryPosition = refresh.groups.indexOfFirst { it.name == refresh.selectedCategory }
+                    binding.categorySpinner.setSelection(if (categoryPosition >= 0) categoryPosition + 1 else 0, false)
+                    binding.categorySpinner.post { spinnerInitialized = true }
                     showChannels()
                 }.onFailure(::showError)
             }
@@ -132,7 +153,17 @@ class CatalogActivity : Activity() {
         finish()
     }
     override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
-    override fun onResume() { super.onResume(); if (::binding.isInitialized) showChannels() }
+    override fun onResume() {
+        super.onResume()
+        if (!::binding.isInitialized) return
+        if (firstResume) firstResume = false else refreshCatalog()
+    }
 
     private enum class FilterMode { ALL, FAVORITES, HISTORY }
+    private data class CatalogRefresh(
+        val account: org.json.JSONObject,
+        val groups: List<Category>,
+        val items: List<Channel>,
+        val selectedCategory: String
+    )
 }

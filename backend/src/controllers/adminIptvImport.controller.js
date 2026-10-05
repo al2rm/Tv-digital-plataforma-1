@@ -13,9 +13,22 @@ import {
 const MAX_IMPORT_SELECTION = 50;
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
-const existingUrls = async () => new Set((await pool.query(
-  "SELECT manifest_url FROM live_channels WHERE manifest_url IS NOT NULL"
-)).rows.map((row) => row.manifest_url));
+export const buildExistingChannelIndex = (rows, source) => ({
+  sourceIds: new Set(rows
+    .filter((row) => row.source === source && row.source_channel_id)
+    .map((row) => row.source_channel_id)),
+  externalUrls: new Set(rows
+    .filter((row) => row.manifest_url && row.source !== source)
+    .map((row) => row.manifest_url))
+});
+
+export const channelAlreadyExists = (index, channel) =>
+  index.sourceIds.has(channel.sourceId) ||
+  Boolean(channel.manifestUrl && index.externalUrls.has(channel.manifestUrl));
+
+const existingChannels = async (source) => buildExistingChannelIndex((await pool.query(
+  "SELECT source,source_channel_id,manifest_url FROM live_channels"
+)).rows, source);
 
 const resolveCountry = async (value) => {
   const code = normalizeCountryCode(value);
@@ -43,7 +56,7 @@ const publicChannel = (channel, existing, countryCode) => {
     trialEligible: trial.eligible,
     trialReason: trial.reason,
     hasCustomHeaders: Object.keys(channel.headers).length > 0,
-    existing: channel.manifestUrl ? existing.has(channel.manifestUrl) : false
+    existing: channelAlreadyExists(existing, channel)
   };
 };
 
@@ -54,9 +67,10 @@ export const listIptvOrgCountries = async (req, res, next) => {
 
 const previewCountry = async (countryCode, res) => {
   const country = await resolveCountry(countryCode);
+  const source = trialCountrySource(country.code);
   const [channels, existing] = await Promise.all([
     loadCountryPlaylist(country.code),
-    existingUrls()
+    existingChannels(source)
   ]);
   const items = channels.map((channel) => publicChannel(channel, existing, country.code));
   res.json({
@@ -99,6 +113,7 @@ const importCountry = async (countryCode, sourceIds, res) => {
   }
 
   const country = await resolveCountry(countryCode);
+  const source = trialCountrySource(country.code);
   const channels = await loadCountryPlaylist(country.code);
   const byId = new Map(channels.map((channel) => [channel.sourceId, channel]));
   const selected = sourceIds.map((id) => byId.get(id));
@@ -107,8 +122,8 @@ const importCountry = async (countryCode, sourceIds, res) => {
     throw fail("Uno o más canales no cumplen los requisitos de la prueba pública; vuelve a abrir la vista previa");
   }
 
-  const existing = await existingUrls();
-  const candidates = selected.filter((channel) => !existing.has(channel.manifestUrl));
+  const existing = await existingChannels(source);
+  const candidates = selected.filter((channel) => !channelAlreadyExists(existing, channel));
   const checks = await mapLimit(candidates, 8, async (channel) => ({
     channel,
     ...await probeChannel(channel)
@@ -133,8 +148,7 @@ const importCountry = async (countryCode, sourceIds, res) => {
     for (const channel of available) {
       const result = await client.query(`INSERT INTO live_channels
         (category_id,nombre,logo_url,manifest_url,drm_type,activo,stream_headers,source,source_channel_id)
-        SELECT $1,$2,$3,$4,'none',TRUE,$5::jsonb,$6,$7
-        WHERE NOT EXISTS (SELECT 1 FROM live_channels WHERE manifest_url=$4)
+        VALUES ($1,$2,$3,$4,'none',TRUE,$5::jsonb,$6,$7)
         ON CONFLICT (source,source_channel_id) WHERE source IS NOT NULL AND source_channel_id IS NOT NULL
         DO NOTHING RETURNING id,nombre`, [
         categoryId,
@@ -142,7 +156,7 @@ const importCountry = async (countryCode, sourceIds, res) => {
         channel.logoUrl,
         channel.manifestUrl,
         JSON.stringify(channel.headers),
-        trialCountrySource(country.code),
+        source,
         channel.sourceId
       ]);
       if (result.rows[0]) imported.push(result.rows[0]);

@@ -11,8 +11,8 @@ android {
         applicationId = "com.tvdigital.player"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0-test"
+        versionCode = 3
+        versionName = "1.2.0-test"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["usesCleartextTraffic"] = "false"

@@ -13,7 +13,10 @@ class AppApiClient(private val baseUrl: String, private val token: String = "") 
             connection.connectTimeout = 10_000
             connection.readTimeout = 15_000
             connection.instanceFollowRedirects = false
+            connection.useCaches = false
             connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Cache-Control", "no-cache, no-store")
+            connection.setRequestProperty("Pragma", "no-cache")
             if (token.isNotBlank()) connection.setRequestProperty("Authorization", "Bearer $token")
             if (payload != null) {
                 connection.requestMethod = "POST"
