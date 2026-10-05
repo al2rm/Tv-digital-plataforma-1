@@ -1,0 +1,891 @@
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index a33beca..295ba46 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -11,8 +11,8 @@ android {
+         applicationId = "com.tvdigital.player"
+         minSdk = 24
+         targetSdk = 36
+-        versionCode = 3
+-        versionName = "1.2.0-test"
++        versionCode = 4
++        versionName = "1.3.0-tv-test"
+ 
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         manifestPlaceholders["usesCleartextTraffic"] = "false"
+diff --git a/android/app/src/main/java/com/tvdigital/player/CatalogActivity.kt b/android/app/src/main/java/com/tvdigital/player/CatalogActivity.kt
+index c437723..3d07c0e 100644
+--- a/android/app/src/main/java/com/tvdigital/player/CatalogActivity.kt
++++ b/android/app/src/main/java/com/tvdigital/player/CatalogActivity.kt
+@@ -1,14 +1,15 @@
+ package com.tvdigital.player
+ 
++import android.animation.ValueAnimator
+ import android.app.Activity
++import android.app.AlertDialog
+ import android.content.Intent
+ import android.os.Bundle
+ import android.view.View
+-import android.view.inputmethod.EditorInfo
+-import android.widget.ArrayAdapter
+-import android.widget.AdapterView
++import android.view.ViewGroup
+ import android.widget.Toast
+-import androidx.recyclerview.widget.GridLayoutManager
++import androidx.recyclerview.widget.LinearLayoutManager
++import androidx.recyclerview.widget.RecyclerView
+ import com.tvdigital.player.databinding.ActivityCatalogBinding
+ import java.util.concurrent.Executors
+ 
+@@ -16,154 +17,193 @@ class CatalogActivity : Activity() {
+     private lateinit var binding: ActivityCatalogBinding
+     private val executor = Executors.newSingleThreadExecutor()
+     private val api by lazy { CatalogApiClient(SessionStore.baseUrl, SessionStore.token) }
+-    private val channelAdapter = ChannelAdapter(::openChannel, ::toggleFavorite)
++    private val sectionAdapter = HomeSectionAdapter(::openChannel, ::toggleFavorite, ::collapseMenu)
+     private var categories = emptyList<Category>()
+     private var channels = emptyList<Channel>()
+-    private var spinnerInitialized = false
+-    private var filterMode = FilterMode.ALL
+     private var canPlay = false
+     private var generation = 0
+     private var firstResume = true
++    private var menuExpanded = false
+     private val preferences by lazy { getSharedPreferences("favorites", MODE_PRIVATE) }
+     private val favoriteKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}"
+-    private val historyPreferences by lazy { getSharedPreferences("history", MODE_PRIVATE) }
+-    private val historyKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}"
+     private fun favorites() = preferences.getStringSet(favoriteKey, emptySet()).orEmpty().toSet()
+-    private fun history() = HistoryCodec.decode(historyPreferences.getString(historyKey, ""))
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         if (SessionStore.token.isBlank()) { logout(); return }
+         binding = ActivityCatalogBinding.inflate(layoutInflater)
+         setContentView(binding.root)
+-        binding.channelList.layoutManager = GridLayoutManager(this, if (resources.configuration.screenWidthDp >= 600) 4 else 2)
+-        binding.channelList.adapter = channelAdapter
+-        binding.searchButton.setOnClickListener { loadChannels() }
+-        binding.refreshButton.setOnClickListener { refreshCatalog() }
+-        binding.searchInput.setOnEditorActionListener { _, action, _ ->
+-            if (action == EditorInfo.IME_ACTION_SEARCH) { loadChannels(); true } else false
+-        }
+-        binding.logoutButton.setOnClickListener { logout() }
+-        binding.favoritesButton.setOnClickListener {
+-            filterMode = if (filterMode == FilterMode.FAVORITES) FilterMode.ALL else FilterMode.FAVORITES
+-            updateFilterButtons()
+-            showChannels()
+-        }
+-        binding.historyButton.setOnClickListener {
+-            filterMode = if (filterMode == FilterMode.HISTORY) FilterMode.ALL else FilterMode.HISTORY
+-            updateFilterButtons()
+-            showChannels()
+-        }
++        binding.sectionList.layoutManager = LinearLayoutManager(this)
++        binding.sectionList.adapter = sectionAdapter
++        binding.sectionList.itemAnimator = null
++        setupMenu()
+         refreshCatalog()
+     }
++
++    private fun setupMenu() {
++        val buttons = listOf(binding.homeButton, binding.favoritesButton, binding.moviesButton,
++            binding.seriesButton, binding.settingsButton, binding.aboutButton)
++        buttons.forEach { item -> item.setOnFocusChangeListener { _, focused -> if (focused) expandMenu() } }
++        binding.homeButton.setOnClickListener { selectMenu(binding.homeButton); showHome() }
++        binding.favoritesButton.setOnClickListener { selectMenu(binding.favoritesButton); showFavorites() }
++        binding.moviesButton.setOnClickListener { selectMenu(binding.moviesButton); loadMovies() }
++        binding.seriesButton.setOnClickListener {
++            selectMenu(binding.seriesButton)
++            showSections("Series", emptyList(), "Todavía no hay series publicadas.")
++        }
++        binding.settingsButton.setOnClickListener { showSettings() }
++        binding.aboutButton.setOnClickListener { showAbout() }
++    }
++
+     private fun refreshCatalog() {
+         val current = ++generation
+-        val selected = binding.categorySpinner.selectedItemPosition
+-        val previousCategory = categories.getOrNull(selected - 1)?.name.orEmpty()
+-        val search = binding.searchInput.text.toString()
+         binding.loading.visibility = View.VISIBLE
++        binding.emptyState.visibility = View.GONE
+         executor.execute {
+             val result = runCatching {
+                 val account = api.loadAccount()
+                 val groups = api.loadCategories()
+-                val category = previousCategory.takeIf { previous -> groups.any { it.name == previous } }.orEmpty()
+-                CatalogRefresh(account, groups, api.loadChannels(category, search), category)
++                val items = api.loadChannels(kind = "channel")
++                Triple(account, groups, items)
+             }
+             runOnUiThread {
+                 if (isDestroyed || isFinishing || current != generation) return@runOnUiThread
+-                result.onSuccess { refresh ->
+-                    val account = refresh.account
++                result.onSuccess { (account, groups, items) ->
+                     canPlay = account.optBoolean("canPlay")
+-                    val end = account.optJSONObject("subscription")?.optString("vencimiento")
+-                    binding.accountStatus.text = "${SessionStore.name} · " + when {
+-                        end != null -> "Vence: $end"
+-                        canPlay -> "Vista de administrador"
+-                        else -> "Sin suscripción activa"
+-                    }
+-                    categories = refresh.groups
+-                    channels = refresh.items
+-                    spinnerInitialized = false
+-                    binding.categorySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Todas las categorías") + refresh.groups.map { it.name })
+-                    binding.categorySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+-                        override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+-                        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+-                            if (spinnerInitialized) loadChannels() else spinnerInitialized = true
+-                        }
+-                    }
+-                    val categoryPosition = refresh.groups.indexOfFirst { it.name == refresh.selectedCategory }
+-                    binding.categorySpinner.setSelection(if (categoryPosition >= 0) categoryPosition + 1 else 0, false)
+-                    binding.categorySpinner.post { spinnerInitialized = true }
+-                    showChannels()
++                    categories = groups
++                    channels = items
++                    selectMenu(binding.homeButton)
++                    showHome()
+                 }.onFailure(::showError)
+             }
+         }
+     }
+-    private fun loadChannels() {
++
++    private fun buildHomeSections(): List<HomeSection> = buildList {
++        val selected = channels.filter(Channel::featured).sortedWith(compareBy(Channel::homeOrder, Channel::name))
++        if (selected.isNotEmpty()) add(HomeSection("Canales seleccionados", selected))
++        val categoryOrder = categories.associate { it.name to it.displayOrder }
++        channels.groupBy(Channel::category).entries
++            .sortedWith(compareBy({ categoryOrder[it.key] ?: it.value.minOfOrNull(Channel::categoryOrder) ?: 100 }, { it.key }))
++            .forEach { (name, items) -> add(HomeSection(name, items.sortedBy(Channel::name))) }
++    }
++
++    private fun showHome() = showSections("Inicio", buildHomeSections(), "No hay canales disponibles.")
++
++    private fun showFavorites() {
++        val favoriteChannels = channels.filter { it.groupId in favorites() }
++        showSections("Favoritos", if (favoriteChannels.isEmpty()) emptyList() else listOf(HomeSection("Mis canales", favoriteChannels)),
++            "Todavía no agregaste canales a Favoritos.")
++    }
++
++    private fun loadMovies() {
+         val current = ++generation
+-        val selected = binding.categorySpinner.selectedItemPosition
+-        val category = categories.getOrNull(selected - 1)?.name.orEmpty()
+-        val search = binding.searchInput.text.toString()
+         binding.loading.visibility = View.VISIBLE
+         executor.execute {
+-            val result = runCatching { api.loadChannels(category, search) }
++            val result = runCatching { api.loadChannels(kind = "movie") }
+             runOnUiThread {
+                 if (isDestroyed || isFinishing || current != generation) return@runOnUiThread
+-                result.onSuccess { channels = it; showChannels() }.onFailure(::showError)
++                result.onSuccess { movies ->
++                    val sections = movies.groupBy(Channel::category).map { HomeSection(it.key, it.value) }
++                    showSections("Películas", sections, "Todavía no hay películas publicadas.")
++                }.onFailure(::showError)
+             }
+         }
+     }
+-    private fun showChannels() {
+-        val ids = favorites()
+-        val recent = history()
+-        val shown = when (filterMode) {
+-            FilterMode.ALL -> channels
+-            FilterMode.FAVORITES -> channels.filter { it.groupId in ids }
+-            FilterMode.HISTORY -> {
+-                val byId = channels.associateBy(Channel::groupId)
+-                recent.mapNotNull(byId::get)
+-            }
+-        }
+-        channelAdapter.submitList(shown, ids)
++
++    private fun showSections(title: String, sections: List<HomeSection>, emptyMessage: String) {
++        binding.screenTitle.text = title
++        sectionAdapter.submitList(sections)
+         binding.loading.visibility = View.GONE
+-        binding.emptyState.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
+-        binding.catalogStatus.text = "${shown.size} contenidos disponibles"
++        binding.emptyState.text = emptyMessage
++        binding.emptyState.visibility = if (sections.isEmpty()) View.VISIBLE else View.GONE
++        val total = sections.sumOf { it.channels.size }
++        binding.catalogStatus.text = if (total == 1) "1 contenido disponible" else "$total contenidos disponibles"
++        if (sections.isNotEmpty()) binding.sectionList.post { focusFirstChannel() }
+     }
+-    private fun updateFilterButtons() {
+-        binding.favoritesButton.text = if (filterMode == FilterMode.FAVORITES) "Ver todo" else "Favoritos"
+-        binding.historyButton.text = if (filterMode == FilterMode.HISTORY) "Ver todo" else "Recientes"
++
++    private fun focusFirstChannel() {
++        val section = binding.sectionList.findViewHolderForAdapterPosition(0)?.itemView as? ViewGroup ?: return
++        val row = section.findViewById<RecyclerView>(R.id.channelRow)
++        row?.post { row.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
+     }
+-    private fun toggleFavorite(channel: Channel) {
+-        val ids = favorites().toMutableSet()
+-        if (!ids.add(channel.groupId)) ids.remove(channel.groupId)
+-        preferences.edit().putStringSet(favoriteKey, ids).apply()
+-        showChannels()
++
++    private fun selectMenu(selected: View) {
++        listOf(binding.homeButton, binding.favoritesButton, binding.moviesButton, binding.seriesButton,
++            binding.settingsButton, binding.aboutButton).forEach { it.isSelected = it === selected }
+     }
++
++    private fun expandMenu() {
++        if (menuExpanded) return
++        menuExpanded = true
++        menuLabels().forEach { it.visibility = View.VISIBLE }
++        animateMenuWidth(binding.sideMenu.width.coerceAtLeast(dp(76)), dp(270))
++    }
++
++    private fun collapseMenu() {
++        if (!menuExpanded) return
++        menuExpanded = false
++        animateMenuWidth(binding.sideMenu.width, dp(76)) { menuLabels().forEach { it.visibility = View.GONE } }
++    }
++
++    private fun animateMenuWidth(from: Int, to: Int, end: (() -> Unit)? = null) {
++        ValueAnimator.ofInt(from, to).apply {
++            duration = 160
++            addUpdateListener { binding.sideMenu.layoutParams = binding.sideMenu.layoutParams.apply { width = it.animatedValue as Int } }
++            if (end != null) addListener(object : android.animation.AnimatorListenerAdapter() { override fun onAnimationEnd(animation: android.animation.Animator) = end() })
++            start()
++        }
++    }
++
++    private fun menuLabels() = listOf(binding.homeLabel, binding.favoritesLabel, binding.moviesLabel,
++        binding.seriesLabel, binding.settingsLabel, binding.aboutLabel)
++    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
++
+     private fun openChannel(channel: Channel) {
+         if (!canPlay) { Toast.makeText(this, "Contacta al administrador para activar tu suscripción", Toast.LENGTH_LONG).show(); return }
+         startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_CONTENT_ID, channel.groupId))
+     }
++
++    private fun toggleFavorite(channel: Channel) {
++        val ids = favorites().toMutableSet()
++        val added = ids.add(channel.groupId)
++        if (!added) ids.remove(channel.groupId)
++        preferences.edit().putStringSet(favoriteKey, ids).apply()
++        Toast.makeText(this, if (added) "Agregado a Favoritos" else "Eliminado de Favoritos", Toast.LENGTH_SHORT).show()
++        if (binding.screenTitle.text.toString() == "Favoritos") showFavorites()
++    }
++
++    private fun showSettings() {
++        AlertDialog.Builder(this).setTitle("Configuración")
++            .setItems(arrayOf("Actualizar canales", "Cerrar sesión")) { _, which -> if (which == 0) refreshCatalog() else logout() }
++            .setNegativeButton("Cerrar", null).show()
++    }
++
++    private fun showAbout() {
++        AlertDialog.Builder(this).setTitle("TV Digital Pro")
++            .setMessage("Versión ${BuildConfig.VERSION_NAME}\nAplicación optimizada para TV Box y control remoto.")
++            .setPositiveButton("Aceptar", null).show()
++    }
++
+     private fun showError(error: Throwable) {
+         if (error is ApiException && error.status == 401) { logout(); return }
+         binding.loading.visibility = View.GONE
+         binding.catalogStatus.text = error.message ?: "No se pudo cargar el catálogo"
++        binding.emptyState.text = "No pudimos cargar los canales. Revisa la conexión e intenta nuevamente."
++        binding.emptyState.visibility = View.VISIBLE
+     }
++
+     private fun logout() {
+         SessionStore.clear()
+         startActivity(Intent(this, LoginActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+         finish()
+     }
+-    override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
++
+     override fun onResume() {
+         super.onResume()
+         if (!::binding.isInitialized) return
+         if (firstResume) firstResume = false else refreshCatalog()
+     }
+ 
+-    private enum class FilterMode { ALL, FAVORITES, HISTORY }
+-    private data class CatalogRefresh(
+-        val account: org.json.JSONObject,
+-        val groups: List<Category>,
+-        val items: List<Channel>,
+-        val selectedCategory: String
+-    )
++    override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
+ }
+diff --git a/android/app/src/main/java/com/tvdigital/player/CatalogApiClient.kt b/android/app/src/main/java/com/tvdigital/player/CatalogApiClient.kt
+index 7ebfb13..c12c639 100644
+--- a/android/app/src/main/java/com/tvdigital/player/CatalogApiClient.kt
++++ b/android/app/src/main/java/com/tvdigital/player/CatalogApiClient.kt
+@@ -4,11 +4,11 @@ class CatalogApiClient(baseUrl: String, token: String) {
+     private val api = AppApiClient(baseUrl, token)
+     fun loadCategories() = CatalogParser.parseCategories(api.request("api/catalog/categories").toString())
+     fun loadAccount() = api.request("api/app/account").getJSONObject("data")
+-    fun loadChannels(category: String = "", search: String = ""): List<Channel> {
++    fun loadChannels(category: String = "", search: String = "", kind: String = ""): List<Channel> {
+         val results = mutableListOf<Channel>()
+         var more: Boolean
+         do {
+-            val path = "api/catalog/channels?limit=100&offset=${results.size}&category=${encode(category)}&search=${encode(search)}"
++            val path = "api/catalog/channels?limit=100&offset=${results.size}&category=${encode(category)}&search=${encode(search)}&kind=${encode(kind)}"
+             val (items, hasMore) = CatalogParser.parseChannels(api.request(path).toString())
+             results += items
+             more = hasMore && items.isNotEmpty()
+diff --git a/android/app/src/main/java/com/tvdigital/player/CatalogModels.kt b/android/app/src/main/java/com/tvdigital/player/CatalogModels.kt
+index 54d3c63..651422c 100644
+--- a/android/app/src/main/java/com/tvdigital/player/CatalogModels.kt
++++ b/android/app/src/main/java/com/tvdigital/player/CatalogModels.kt
+@@ -7,10 +7,14 @@ data class Channel(
+     val name: String,
+     val category: String,
+     val logo: String,
+-    val squareLogo: String
++    val squareLogo: String,
++    val featured: Boolean = false,
++    val homeOrder: Int = 100,
++    val categoryOrder: Int = 100
+ )
+ 
+-data class Category(val name: String, val channelCount: Int)
++data class Category(val name: String, val channelCount: Int, val displayOrder: Int = 100)
++data class HomeSection(val title: String, val channels: List<Channel>)
+ 
+ object CatalogParser {
+     fun parseCategories(rawJson: String): List<Category> {
+@@ -19,7 +23,7 @@ object CatalogParser {
+         return buildList {
+             for (index in 0 until data.length()) {
+                 val item = data.getJSONObject(index)
+-                add(Category(item.getString("name"), item.getInt("channelCount")))
++                add(Category(item.getString("name"), item.getInt("channelCount"), item.optInt("displayOrder", 100)))
+             }
+         }
+     }
+@@ -36,7 +40,10 @@ object CatalogParser {
+                     name = item.getString("name"),
+                     category = item.getString("category"),
+                     logo = item.optString("logo"),
+-                    squareLogo = item.optString("squareLogo")
++                    squareLogo = item.optString("squareLogo"),
++                    featured = item.optBoolean("featured", false),
++                    homeOrder = item.optInt("homeOrder", 100),
++                    categoryOrder = item.optInt("categoryOrder", 100)
+                 ))
+             }
+         }
+diff --git a/android/app/src/main/java/com/tvdigital/player/ChannelAdapter.kt b/android/app/src/main/java/com/tvdigital/player/ChannelAdapter.kt
+index 20d79df..69044ac 100644
+--- a/android/app/src/main/java/com/tvdigital/player/ChannelAdapter.kt
++++ b/android/app/src/main/java/com/tvdigital/player/ChannelAdapter.kt
+@@ -7,14 +7,12 @@ import com.tvdigital.player.databinding.ItemChannelBinding
+ 
+ class ChannelAdapter(
+     private val onClick: (Channel) -> Unit,
+-    private val onFavorite: (Channel) -> Unit
++    private val onFavorite: (Channel) -> Unit,
++    private val onFocused: () -> Unit
+ ) : RecyclerView.Adapter<ChannelAdapter.ChannelViewHolder>() {
+     private val items = mutableListOf<Channel>()
+ 
+-    private var favoriteIds = emptySet<String>()
+-
+-    fun submitList(channels: List<Channel>, favorites: Set<String>) {
+-        favoriteIds = favorites
++    fun submitList(channels: List<Channel>) {
+         items.clear()
+         items.addAll(channels)
+         notifyDataSetChanged()
+@@ -24,18 +22,20 @@ class ChannelAdapter(
+         ItemChannelBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+     )
+ 
+-    override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) = holder.bind(items[position])
++    override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) = holder.bind(items[position], position == 0)
+     override fun getItemCount() = items.size
+ 
+     inner class ChannelViewHolder(private val binding: ItemChannelBinding) : RecyclerView.ViewHolder(binding.root) {
+-        fun bind(channel: Channel) {
+-            binding.favoriteButton.text = if (channel.groupId in favoriteIds) "★ Favorito" else "☆ Favorito"
+-            binding.favoriteButton.contentDescription = "Favorito: ${channel.name}"
+-            binding.favoriteButton.setOnClickListener { onFavorite(channel) }
+-            binding.channelName.text = channel.name
+-            binding.channelCategory.text = channel.category
+-            RemoteImageLoader.load(binding.channelLogo, channel.logo)
++        fun bind(channel: Channel, first: Boolean) {
++            RemoteImageLoader.load(binding.channelLogo, channel.logo.ifBlank { channel.squareLogo })
++            binding.root.contentDescription = channel.name
++            binding.root.nextFocusLeftId = if (first) R.id.homeButton else android.view.View.NO_ID
+             binding.root.setOnClickListener { onClick(channel) }
++            binding.root.setOnLongClickListener { onFavorite(channel); true }
++            binding.root.setOnFocusChangeListener { view, focused ->
++                view.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(120).start()
++                if (focused) onFocused()
++            }
+         }
+     }
+ }
+diff --git a/android/app/src/main/java/com/tvdigital/player/HomeSectionAdapter.kt b/android/app/src/main/java/com/tvdigital/player/HomeSectionAdapter.kt
+new file mode 100644
+index 0000000..79c605d
+--- /dev/null
++++ b/android/app/src/main/java/com/tvdigital/player/HomeSectionAdapter.kt
+@@ -0,0 +1,42 @@
++package com.tvdigital.player
++
++import android.view.LayoutInflater
++import android.view.ViewGroup
++import androidx.recyclerview.widget.LinearLayoutManager
++import androidx.recyclerview.widget.RecyclerView
++import com.tvdigital.player.databinding.ItemHomeSectionBinding
++
++class HomeSectionAdapter(
++    private val onChannel: (Channel) -> Unit,
++    private val onFavorite: (Channel) -> Unit,
++    private val onChannelFocused: () -> Unit
++) : RecyclerView.Adapter<HomeSectionAdapter.SectionViewHolder>() {
++    private val sections = mutableListOf<HomeSection>()
++    private val pool = RecyclerView.RecycledViewPool()
++
++    fun submitList(value: List<HomeSection>) {
++        sections.clear()
++        sections.addAll(value)
++        notifyDataSetChanged()
++    }
++
++    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = SectionViewHolder(
++        ItemHomeSectionBinding.inflate(LayoutInflater.from(parent.context), parent, false)
++    )
++
++    override fun onBindViewHolder(holder: SectionViewHolder, position: Int) = holder.bind(sections[position])
++    override fun getItemCount() = sections.size
++
++    inner class SectionViewHolder(private val binding: ItemHomeSectionBinding) : RecyclerView.ViewHolder(binding.root) {
++        private val adapter = ChannelAdapter(onChannel, onFavorite, onChannelFocused)
++        init {
++            binding.channelRow.layoutManager = LinearLayoutManager(binding.root.context, RecyclerView.HORIZONTAL, false)
++            binding.channelRow.adapter = adapter
++            binding.channelRow.setRecycledViewPool(pool)
++        }
++        fun bind(section: HomeSection) {
++            binding.sectionTitle.text = section.title
++            adapter.submitList(section.channels)
++        }
++    }
++}
+diff --git a/android/app/src/main/java/com/tvdigital/player/PlaybackSession.kt b/android/app/src/main/java/com/tvdigital/player/PlaybackSession.kt
+index a486eb9..94e4834 100644
+--- a/android/app/src/main/java/com/tvdigital/player/PlaybackSession.kt
++++ b/android/app/src/main/java/com/tvdigital/player/PlaybackSession.kt
+@@ -8,11 +8,13 @@ data class PlaybackSession(
+     val manifestUrl: String,
+     val mimeType: String?,
+     val streamHeaders: Map<String, String>,
+-    val drm: DrmConfig?
++    val drm: DrmConfig?,
++    val backupUrl: String? = null
+ ) {
+     init {
+         requirePlaybackUrl(manifestUrl, "manifestUrl", BuildConfig.ALLOW_HTTP_STREAMS)
+         drm?.let { requirePlaybackUrl(it.licenseUrl, "licenseUrl", false) }
++        backupUrl?.let { requirePlaybackUrl(it, "backupUrl", BuildConfig.ALLOW_HTTP_STREAMS) }
+     }
+ 
+     data class DrmConfig(
+@@ -22,6 +24,11 @@ data class PlaybackSession(
+     )
+ 
+     fun playbackCandidates(): List<PlaybackSession> {
++        if (backupUrl != null) {
++            val primary = copy(backupUrl = null).playbackCandidates()
++            val backup = copy(manifestUrl = backupUrl, backupUrl = null, mimeType = null, streamHeaders = emptyMap()).playbackCandidates()
++            return (primary + backup).distinctBy { it.manifestUrl }
++        }
+         if (drm != null) return listOf(this)
+ 
+         val hlsUrl = manifestUrl.replace(MPEG_TS_SUFFIX, ".m3u8")
+@@ -70,6 +77,7 @@ data class PlaybackSession(
+                 manifestUrl = data.getString("manifestUrl"),
+                 mimeType = data.optString("mimeType").takeIf(String::isNotBlank),
+                 streamHeaders = data.optJSONObject("streamHeaders").toStringMap(),
++                backupUrl = data.optString("backupUrl").takeIf { it.isNotBlank() && it != "null" },
+                 drm = drmJson?.let {
+                     DrmConfig(
+                         scheme = it.optString("scheme", "widevine"),
+diff --git a/android/app/src/main/java/com/tvdigital/player/RemoteImageLoader.kt b/android/app/src/main/java/com/tvdigital/player/RemoteImageLoader.kt
+index 3d39da6..4c7f57d 100644
+--- a/android/app/src/main/java/com/tvdigital/player/RemoteImageLoader.kt
++++ b/android/app/src/main/java/com/tvdigital/player/RemoteImageLoader.kt
+@@ -18,7 +18,8 @@ object RemoteImageLoader {
+         imageView.tag = url
+         imageView.setImageDrawable(null)
+         cache.get(url)?.let { imageView.setImageBitmap(it); return }
+-        if (!url.startsWith("https://")) return
++        val supported = url.startsWith("https://") || (BuildConfig.ALLOW_HTTP_STREAMS && url.startsWith("http://"))
++        if (!supported) return
+ 
+         executor.execute {
+             val bitmap = runCatching {
+diff --git a/android/app/src/main/res/drawable/channel_card_selector.xml b/android/app/src/main/res/drawable/channel_card_selector.xml
+new file mode 100644
+index 0000000..bacdf4f
+--- /dev/null
++++ b/android/app/src/main/res/drawable/channel_card_selector.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<selector xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:state_focused="true"><shape><solid android:color="#101B30"/><stroke android:width="4dp" android:color="#22D3EE"/><corners android:radius="14dp"/></shape></item>
++    <item><shape><solid android:color="#0D1729"/><stroke android:width="1dp" android:color="#26364F"/><corners android:radius="14dp"/></shape></item>
++</selector>
+diff --git a/android/app/src/main/res/drawable/ic_favorite.xml b/android/app/src/main/res/drawable/ic_favorite.xml
+new file mode 100644
+index 0000000..dbc2a2d
+--- /dev/null
++++ b/android/app/src/main/res/drawable/ic_favorite.xml
+@@ -0,0 +1 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFF" android:pathData="M12,21.35l-1.45,-1.32C5.4,15.36 2,12.28 2,8.5 2,5.42 4.42,3 7.5,3c1.74,0 3.41,0.81 4.5,2.09C13.09,3.81 14.76,3 16.5,3 19.58,3 22,5.42 22,8.5c0,3.78 -3.4,6.86 -8.55,11.54z"/></vector>
+diff --git a/android/app/src/main/res/drawable/ic_home.xml b/android/app/src/main/res/drawable/ic_home.xml
+new file mode 100644
+index 0000000..b0c9ffc
+--- /dev/null
++++ b/android/app/src/main/res/drawable/ic_home.xml
+@@ -0,0 +1 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFF" android:pathData="M10,20v-6h4v6h5v-8h3L12,3 2,12h3v8z"/></vector>
+diff --git a/android/app/src/main/res/drawable/ic_info.xml b/android/app/src/main/res/drawable/ic_info.xml
+new file mode 100644
+index 0000000..3f3a890
+--- /dev/null
++++ b/android/app/src/main/res/drawable/ic_info.xml
+@@ -0,0 +1 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFF" android:pathData="M11,17h2v-6h-2zM12,2a10,10 0,1 0,0 20,10 10,0 0,0 0,-20M12,20a8,8 0,1 1,0 -16,8 8,0 0,1 0,16M11,9h2V7h-2z"/></vector>
+diff --git a/android/app/src/main/res/drawable/ic_movie.xml b/android/app/src/main/res/drawable/ic_movie.xml
+new file mode 100644
+index 0000000..355446c
+--- /dev/null
++++ b/android/app/src/main/res/drawable/ic_movie.xml
+@@ -0,0 +1 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFF" android:pathData="M18,4l2,4h-3l-2,-4h-2l2,4h-3l-2,-4H8l2,4H7L5,4H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V4z"/></vector>
+diff --git a/android/app/src/main/res/drawable/ic_series.xml b/android/app/src/main/res/drawable/ic_series.xml
+new file mode 100644
+index 0000000..a85195d
+--- /dev/null
++++ b/android/app/src/main/res/drawable/ic_series.xml
+@@ -0,0 +1 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFF" android:pathData="M21,3H3c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h5v2h8v-2h5c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2M21,17H3V5h18z"/></vector>
+diff --git a/android/app/src/main/res/drawable/ic_settings.xml b/android/app/src/main/res/drawable/ic_settings.xml
+new file mode 100644
+index 0000000..6910c36
+--- /dev/null
++++ b/android/app/src/main/res/drawable/ic_settings.xml
+@@ -0,0 +1 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#FFFFFF" android:pathData="M19.43,12.98c0.04,-0.32 0.07,-0.65 0.07,-0.98s-0.03,-0.66 -0.08,-0.98l2.11,-1.65c0.19,-0.15 0.24,-0.42 0.12,-0.64l-2,-3.46c-0.12,-0.22 -0.37,-0.31 -0.6,-0.22l-2.49,1c-0.52,-0.4 -1.08,-0.73 -1.69,-0.98L14.5,2.42C14.47,2.18 14.25,2 14,2h-4c-0.25,0 -0.46,0.18 -0.5,0.42L9.12,5.07c-0.61,0.25 -1.18,0.59 -1.69,0.98l-2.49,-1c-0.23,-0.08 -0.48,0 -0.6,0.22l-2,3.46c-0.13,0.22 -0.07,0.49 0.12,0.64l2.11,1.65c-0.04,0.32 -0.08,0.66 -0.08,0.98s0.03,0.66 0.08,0.98l-2.11,1.65c-0.19,0.15 -0.24,0.42 -0.12,0.64l2,3.46c0.12,0.22 0.37,0.31 0.6,0.22l2.49,-1c0.52,0.4 1.08,0.73 1.69,0.98l0.38,2.65c0.04,0.24 0.25,0.42 0.5,0.42h4c0.25,0 0.46,-0.18 0.5,-0.42l0.38,-2.65c0.61,-0.25 1.18,-0.58 1.69,-0.98l2.49,1c0.23,0.08 0.48,0 0.6,-0.22l2,-3.46c0.12,-0.22 0.07,-0.49 -0.12,-0.64zM12,15.5A3.5,3.5 0,1 1,12 8a3.5,3.5 0,0 1,0 7.5"/></vector>
+diff --git a/android/app/src/main/res/drawable/menu_item_selector.xml b/android/app/src/main/res/drawable/menu_item_selector.xml
+new file mode 100644
+index 0000000..2d724c6
+--- /dev/null
++++ b/android/app/src/main/res/drawable/menu_item_selector.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<selector xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:state_focused="true"><shape><solid android:color="#1477E8"/><stroke android:width="2dp" android:color="#38BDF8"/><corners android:radius="12dp"/></shape></item>
++    <item android:state_selected="true"><shape><solid android:color="#1155B8"/><corners android:radius="12dp"/></shape></item>
++    <item><shape><solid android:color="#00000000"/><corners android:radius="12dp"/></shape></item>
++</selector>
+diff --git a/android/app/src/main/res/drawable/sidebar_background.xml b/android/app/src/main/res/drawable/sidebar_background.xml
+new file mode 100644
+index 0000000..6725afc
+--- /dev/null
++++ b/android/app/src/main/res/drawable/sidebar_background.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <solid android:color="#071225"/><stroke android:width="1dp" android:color="#1E3656"/>
++    <corners android:topRightRadius="20dp" android:bottomRightRadius="20dp"/>
++</shape>
+diff --git a/android/app/src/main/res/layout/activity_catalog.xml b/android/app/src/main/res/layout/activity_catalog.xml
+index ab368b7..063196e 100644
+--- a/android/app/src/main/res/layout/activity_catalog.xml
++++ b/android/app/src/main/res/layout/activity_catalog.xml
+@@ -1,99 +1,52 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:layout_width="match_parent"
+-    android:layout_height="match_parent"
+-    android:background="#050816"
+-    android:orientation="vertical"
+-    android:padding="16dp">
+-
+-    <TextView
+-        android:layout_width="wrap_content"
+-        android:layout_height="wrap_content"
+-        android:text="@string/catalog_title"
+-        android:textColor="#FFFFFF"
+-        android:textSize="28sp"
+-        android:textStyle="bold" />
+-
+-    <TextView
+-        android:id="@+id/catalogStatus"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_marginTop="4dp"
+-        android:text="@string/loading_catalog"
+-        android:textColor="#94A3B8"
+-        android:textSize="14sp" />
+-
+-    <TextView android:id="@+id/accountStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#38BDF8" android:layout_marginTop="12dp" />
+-
+-    <Button
+-        android:id="@+id/refreshButton"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_marginTop="8dp"
+-        android:text="Actualizar canales" />
+-
+-    <LinearLayout
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_marginTop="8dp"
+-        android:orientation="horizontal">
+-
+-        <EditText
+-            android:id="@+id/searchInput"
+-            android:layout_width="0dp"
+-            android:layout_height="wrap_content"
+-            android:layout_weight="1"
+-            android:hint="@string/search_hint"
+-            android:imeOptions="actionSearch"
+-            android:inputType="text"
+-            android:singleLine="true"
+-            android:textColor="#FFFFFF"
+-            android:textColorHint="#64748B" />
+-
+-        <Button
+-            android:id="@+id/searchButton"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:layout_marginStart="8dp"
+-            android:text="@string/search_button" />
++    android:layout_width="match_parent" android:layout_height="match_parent"
++    android:background="#050816" android:orientation="horizontal">
++    <LinearLayout android:id="@+id/sideMenu" android:layout_width="76dp"
++        android:layout_height="match_parent" android:background="@drawable/sidebar_background"
++        android:clipChildren="false" android:orientation="vertical"
++        android:paddingStart="8dp" android:paddingTop="24dp" android:paddingEnd="8dp" android:paddingBottom="16dp">
++        <LinearLayout android:id="@+id/homeButton" style="@style/TvMenuItem">
++            <ImageView style="@style/TvMenuIcon" android:src="@drawable/ic_home" />
++            <TextView android:id="@+id/homeLabel" style="@style/TvMenuLabel" android:text="Inicio" />
++        </LinearLayout>
++        <LinearLayout android:id="@+id/favoritesButton" style="@style/TvMenuItem">
++            <ImageView style="@style/TvMenuIcon" android:src="@drawable/ic_favorite" />
++            <TextView android:id="@+id/favoritesLabel" style="@style/TvMenuLabel" android:text="Favoritos" />
++        </LinearLayout>
++        <LinearLayout android:id="@+id/moviesButton" style="@style/TvMenuItem">
++            <ImageView style="@style/TvMenuIcon" android:src="@drawable/ic_movie" />
++            <TextView android:id="@+id/moviesLabel" style="@style/TvMenuLabel" android:text="Películas" />
++        </LinearLayout>
++        <LinearLayout android:id="@+id/seriesButton" style="@style/TvMenuItem">
++            <ImageView style="@style/TvMenuIcon" android:src="@drawable/ic_series" />
++            <TextView android:id="@+id/seriesLabel" style="@style/TvMenuLabel" android:text="Series" />
++        </LinearLayout>
++        <LinearLayout android:id="@+id/settingsButton" style="@style/TvMenuItem">
++            <ImageView style="@style/TvMenuIcon" android:src="@drawable/ic_settings" />
++            <TextView android:id="@+id/settingsLabel" style="@style/TvMenuLabel" android:text="Configuración" />
++        </LinearLayout>
++        <LinearLayout android:id="@+id/aboutButton" style="@style/TvMenuItem">
++            <ImageView style="@style/TvMenuIcon" android:src="@drawable/ic_info" />
++            <TextView android:id="@+id/aboutLabel" style="@style/TvMenuLabel" android:text="Sobre la app" />
++        </LinearLayout>
+     </LinearLayout>
+-
+-    <Spinner
+-        android:id="@+id/categorySpinner"
+-        android:layout_width="match_parent"
+-        android:layout_height="48dp"
+-        android:layout_marginTop="8dp"
+-        android:backgroundTint="#38BDF8"
+-        android:popupBackground="#0F172A" />
+-
+-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+-    <Button android:id="@+id/favoritesButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Favoritos" />
+-    <Button android:id="@+id/historyButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Recientes" />
+-    <Button android:id="@+id/logoutButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Salir" />
+-    </LinearLayout>
+-    <ProgressBar
+-        android:id="@+id/loading"
+-        android:layout_width="40dp"
+-        android:layout_height="40dp"
+-        android:layout_gravity="center_horizontal"
+-        android:layout_marginTop="12dp" />
+-
+-    <TextView
+-        android:id="@+id/emptyState"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_marginTop="20dp"
+-        android:gravity="center"
+-        android:text="@string/empty_catalog"
+-        android:textColor="#CBD5E1"
+-        android:visibility="gone" />
+-
+-    <androidx.recyclerview.widget.RecyclerView
+-        android:id="@+id/channelList"
+-        android:layout_width="match_parent"
+-        android:layout_height="0dp"
+-        android:layout_marginTop="8dp"
+-        android:layout_weight="1"
+-        android:clipToPadding="false"
+-        android:paddingBottom="16dp" />
++    <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
++        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
++            android:orientation="vertical" android:paddingStart="28dp" android:paddingTop="18dp" android:paddingEnd="20dp">
++            <TextView android:id="@+id/screenTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
++                android:text="Inicio" android:textColor="#FFFFFF" android:textSize="32sp" android:textStyle="bold" />
++            <TextView android:id="@+id/catalogStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
++                android:layout_marginTop="2dp" android:text="Cargando canales…" android:textColor="#94A3B8" android:textSize="14sp" />
++            <androidx.recyclerview.widget.RecyclerView android:id="@+id/sectionList"
++                android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginTop="8dp"
++                android:layout_weight="1" android:clipToPadding="false" android:paddingBottom="24dp" />
++        </LinearLayout>
++        <ProgressBar android:id="@+id/loading" android:layout_width="52dp" android:layout_height="52dp"
++            android:layout_gravity="center" android:indeterminateTint="#38BDF8" />
++        <TextView android:id="@+id/emptyState" android:layout_width="wrap_content" android:layout_height="wrap_content"
++            android:layout_gravity="center" android:gravity="center" android:maxWidth="520dp"
++            android:text="No hay contenido disponible en esta sección." android:textColor="#CBD5E1"
++            android:textSize="20sp" android:visibility="gone" />
++    </FrameLayout>
+ </LinearLayout>
+diff --git a/android/app/src/main/res/layout/item_channel.xml b/android/app/src/main/res/layout/item_channel.xml
+index 524b5b9..c9df012 100644
+--- a/android/app/src/main/res/layout/item_channel.xml
++++ b/android/app/src/main/res/layout/item_channel.xml
+@@ -1,42 +1,7 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:layout_width="match_parent"
+-    android:layout_height="wrap_content"
+-    android:layout_margin="6dp"
+-    android:background="@drawable/panel_background"
+-    android:clickable="true"
+-    android:focusable="true"
+-    android:foreground="?android:attr/selectableItemBackground"
+-    android:minHeight="176dp"
+-    android:orientation="vertical"
+-    android:padding="10dp">
+-
+-    <ImageView
+-        android:id="@+id/channelLogo"
+-        android:layout_width="match_parent"
+-        android:layout_height="100dp"
+-        android:contentDescription="@null"
+-        android:scaleType="centerInside" />
+-
+-    <TextView
+-        android:id="@+id/channelName"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_marginTop="8dp"
+-        android:ellipsize="end"
+-        android:maxLines="2"
+-        android:textColor="#FFFFFF"
+-        android:textSize="15sp"
+-        android:textStyle="bold" />
+-
+-    <TextView
+-        android:id="@+id/channelCategory"
+-        android:layout_width="match_parent"
+-        android:layout_height="wrap_content"
+-        android:layout_marginTop="4dp"
+-        android:ellipsize="end"
+-        android:maxLines="1"
+-        android:textColor="#94A3B8"
+-        android:textSize="12sp" />
+-<Button android:id="@+id/favoriteButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="☆ Favorito" android:textSize="12sp" />
+-</LinearLayout>
++<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="224dp" android:layout_height="118dp" android:layout_marginEnd="12dp"
++    android:background="@drawable/channel_card_selector" android:clickable="true" android:focusable="true" android:padding="12dp">
++    <ImageView android:id="@+id/channelLogo" android:layout_width="match_parent" android:layout_height="match_parent"
++        android:contentDescription="@null" android:scaleType="centerInside" />
++</FrameLayout>
+diff --git a/android/app/src/main/res/layout/item_home_section.xml b/android/app/src/main/res/layout/item_home_section.xml
+new file mode 100644
+index 0000000..5fd6517
+--- /dev/null
++++ b/android/app/src/main/res/layout/item_home_section.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent" android:layout_height="wrap_content"
++    android:orientation="vertical" android:paddingBottom="12dp">
++    <TextView android:id="@+id/sectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
++        android:layout_marginBottom="5dp" android:textColor="#E2E8F0" android:textSize="21sp" android:textStyle="bold" />
++    <androidx.recyclerview.widget.RecyclerView android:id="@+id/channelRow"
++        android:layout_width="match_parent" android:layout_height="126dp" android:clipToPadding="false"
++        android:descendantFocusability="afterDescendants" android:orientation="horizontal" android:paddingEnd="18dp" />
++</LinearLayout>
+diff --git a/android/app/src/main/res/values/themes.xml b/android/app/src/main/res/values/themes.xml
+index 0b29d2b..bef7813 100644
+--- a/android/app/src/main/res/values/themes.xml
++++ b/android/app/src/main/res/values/themes.xml
+@@ -7,4 +7,29 @@
+         <item name="android:statusBarColor">#050816</item>
+         <item name="android:windowLightStatusBar">false</item>
+     </style>
++    <style name="TvMenuItem">
++        <item name="android:layout_width">match_parent</item>
++        <item name="android:layout_height">58dp</item>
++        <item name="android:layout_marginBottom">8dp</item>
++        <item name="android:background">@drawable/menu_item_selector</item>
++        <item name="android:clickable">true</item>
++        <item name="android:focusable">true</item>
++        <item name="android:gravity">center_vertical</item>
++        <item name="android:orientation">horizontal</item>
++        <item name="android:paddingStart">16dp</item>
++        <item name="android:paddingEnd">12dp</item>
++    </style>
++    <style name="TvMenuIcon">
++        <item name="android:layout_width">28dp</item>
++        <item name="android:layout_height">28dp</item>
++        <item name="android:contentDescription">@null</item>
++    </style>
++    <style name="TvMenuLabel">
++        <item name="android:layout_width">wrap_content</item>
++        <item name="android:layout_height">wrap_content</item>
++        <item name="android:layout_marginStart">18dp</item>
++        <item name="android:textColor">#FFFFFF</item>
++        <item name="android:textSize">20sp</item>
++        <item name="android:visibility">gone</item>
++    </style>
+ </resources>
+diff --git a/android/app/src/test/java/com/tvdigital/player/CatalogParserTest.kt b/android/app/src/test/java/com/tvdigital/player/CatalogParserTest.kt
+index 0ef3c10..0bfbb4d 100644
+--- a/android/app/src/test/java/com/tvdigital/player/CatalogParserTest.kt
++++ b/android/app/src/test/java/com/tvdigital/player/CatalogParserTest.kt
+@@ -8,18 +8,21 @@ class CatalogParserTest {
+     @Test
+     fun parsesCategories() {
+         val result = CatalogParser.parseCategories(
+-            """{"ok":true,"data":[{"name":"Noticias","channelCount":4}]}"""
++            """{"ok":true,"data":[{"name":"Noticias","channelCount":4,"displayOrder":2}]}"""
+         )
+         assertEquals("Noticias", result.single().name)
+         assertEquals(4, result.single().channelCount)
++        assertEquals(2, result.single().displayOrder)
+     }
+ 
+     @Test
+     fun parsesChannelPage() {
+         val (channels, hasMore) = CatalogParser.parseChannels(
+-            """{"ok":true,"data":{"items":[{"groupId":"10","name":"Canal","category":"Noticias","logo":"https://cdn/logo.jpg","squareLogo":"https://cdn/square.jpg"}],"pagination":{"hasMore":true}}}"""
++            """{"ok":true,"data":{"items":[{"groupId":"10","name":"Canal","category":"Noticias","logo":"https://cdn/logo.jpg","squareLogo":"https://cdn/square.jpg","featured":true,"homeOrder":3,"categoryOrder":2}],"pagination":{"hasMore":true}}}"""
+         )
+         assertEquals("10", channels.single().groupId)
++        assertTrue(channels.single().featured)
++        assertEquals(3, channels.single().homeOrder)
+         assertTrue(hasMore)
+     }
+ }
