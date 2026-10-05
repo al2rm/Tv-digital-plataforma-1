@@ -25,7 +25,9 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
       - name: Verificar y compilar APK de prueba
         working-directory: android
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+        run: >-
+          ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+          -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/
       - uses: actions/upload-artifact@v4
         with:
           name: TV-Digital-Pro-Android-debug
