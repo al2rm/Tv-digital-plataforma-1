@@ -1,17 +1,14 @@
-import { Plus, RefreshCw } from "lucide-react";
+import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
+import DeleteConfirmationModal from "../components/DeleteConfirmationModal";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import api, { apiError } from "../services/api";
+import { dateInputInTimeZone, formatDateOnly } from "../utils/date";
 
-const today = () => new Date().toISOString().slice(0, 10);
-const formatDate = (value) => {
-  const dateOnly = String(value || "").slice(0, 10);
-  return dateOnly
-    ? new Date(`${dateOnly}T00:00:00`).toLocaleDateString("es-PY")
-    : "-";
-};
+const today = () => dateInputInTimeZone();
+const formatDate = formatDateOnly;
 
 export default function SubscriptionsPage() {
   const [saving, setSaving] = useState(false);
@@ -20,6 +17,9 @@ export default function SubscriptionsPage() {
   const [plans, setPlans] = useState([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [renewing, setRenewing] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [createForm, setCreateForm] = useState({
     userId: "",
     planId: "",
@@ -29,6 +29,14 @@ export default function SubscriptionsPage() {
     monto: "",
     metodo: "manual",
     referencia: ""
+  });
+  const [editForm, setEditForm] = useState({
+    userId: "",
+    planId: "",
+    estado: "activa",
+    fechaInicio: today(),
+    fechaFin: today(),
+    autoRenew: false
   });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -66,10 +74,56 @@ export default function SubscriptionsPage() {
           : "Suscripción creada. No se programaron avisos porque falta teléfono o consentimiento."
       );
       setCreateOpen(false);
+      setCreateForm({ userId: "", planId: "", fechaInicio: today() });
       await load();
     } catch (createError) {
       setError(apiError(createError, "No se pudo crear la suscripción"));
     } finally { setSaving(false); }
+  };
+
+  const openEdit = (subscription) => {
+    setError("");
+    setEditing(subscription);
+    setEditForm({
+      userId: String(subscription.user_id),
+      planId: String(subscription.plan_id),
+      estado: subscription.estado,
+      fechaInicio: String(subscription.fecha_inicio).slice(0, 10),
+      fechaFin: String(subscription.fecha_fin).slice(0, 10),
+      autoRenew: Boolean(subscription.auto_renew)
+    });
+  };
+
+  const update = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await api.put(`/admin/v2/subscriptions/${editing.id}`, editForm);
+      setNotice("Suscripción actualizada correctamente.");
+      setEditing(null);
+      await load();
+    } catch (updateError) {
+      setError(apiError(updateError, "No se pudo actualizar la suscripción"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api.delete(`/admin/v2/subscriptions/${deleteTarget.id}`);
+      setNotice(`Suscripción de “${deleteTarget.usuario_nombre}” eliminada.`);
+      setDeleteTarget(null);
+      await load();
+    } catch (deleteError) {
+      setError(apiError(deleteError, "No se pudo eliminar la suscripción"));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const renew = async (event) => {
@@ -141,7 +195,7 @@ export default function SubscriptionsPage() {
             }
           ]}
           actions={(subscription) => (
-            <button
+            <><button
               type="button"
               className="mini-button mini-button--green"
               onClick={() => {
@@ -156,6 +210,12 @@ export default function SubscriptionsPage() {
               <RefreshCw size={15} />
               Renovar
             </button>
+            <button type="button" className="mini-button" onClick={() => openEdit(subscription)}>
+              <Pencil size={15} />Editar
+            </button>
+            <button type="button" className="mini-button mini-button--danger" onClick={() => { setError(""); setDeleteTarget(subscription); }}>
+              <Trash2 size={15} />Eliminar
+            </button></>
           )}
         />
       </section>
@@ -253,6 +313,52 @@ export default function SubscriptionsPage() {
             </div>
           </form>
         </Modal>
+      ) : null}
+      {editing ? (
+        <Modal title={`Editar suscripción de ${editing.usuario_nombre}`} onClose={() => !saving && setEditing(null)}>
+          <form className="form-grid" onSubmit={update}>
+            {error ? <div className="alert alert--error form-grid__full">{error}</div> : null}
+            <label className="form-grid__full">
+              Cliente
+              <select required value={editForm.userId} onChange={(event) => setEditForm({ ...editForm, userId: event.target.value })}>
+                {users.filter((user) => user.rol === "cliente").map((user) => <option value={user.id} key={user.id}>{user.nombre}</option>)}
+              </select>
+            </label>
+            <label>
+              Plan
+              <select required value={editForm.planId} onChange={(event) => setEditForm({ ...editForm, planId: event.target.value })}>
+                {plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.nombre}</option>)}
+              </select>
+            </label>
+            <label>
+              Estado
+              <select value={editForm.estado} onChange={(event) => setEditForm({ ...editForm, estado: event.target.value })}>
+                <option value="pendiente">Pendiente</option>
+                <option value="activa">Activa</option>
+                <option value="vencida">Vencida</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </label>
+            <label>Fecha de inicio<input required type="date" value={editForm.fechaInicio} onChange={(event) => setEditForm({ ...editForm, fechaInicio: event.target.value })}/></label>
+            <label>Vencimiento<input required type="date" min={editForm.fechaInicio} value={editForm.fechaFin} onChange={(event) => setEditForm({ ...editForm, fechaFin: event.target.value })}/></label>
+            <label className="checkbox-field form-grid__full"><input type="checkbox" checked={editForm.autoRenew} onChange={(event) => setEditForm({ ...editForm, autoRenew: event.target.checked })}/>Renovación automática</label>
+            <div className="form-actions form-grid__full">
+              <button type="button" className="secondary-button" disabled={saving} onClick={() => setEditing(null)}>Cancelar</button>
+              <button className="primary-button" disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+      {deleteTarget ? (
+        <DeleteConfirmationModal
+          title="Eliminar suscripción"
+          name={`${deleteTarget.usuario_nombre} · ${deleteTarget.plan_nombre}`}
+          description="Se cancelarán sus avisos pendientes. Los pagos relacionados se conservarán para no perder el historial financiero."
+          deleting={deleting}
+          error={error}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void remove()}
+        />
       ) : null}
     </>
   );

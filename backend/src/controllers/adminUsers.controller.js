@@ -90,3 +90,70 @@ export const updateUser = async (req, res, next) => {
     res.json({ ok:true, data:result.rows[0] });
   } catch (error) { next(error); }
 };
+
+export const deleteUser = async (req, res, next) => {
+  let client;
+  try {
+    const userId = Number(req.params.id);
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+      return res.status(400).json({ ok: false, message: "Usuario inválido" });
+    }
+    if (userId === req.auth.userId) {
+      return res.status(409).json({
+        ok: false,
+        message: "No puedes eliminar la cuenta con la que has iniciado sesión"
+      });
+    }
+
+    const current = await pool.query(
+      `SELECT u.id, u.nombre, u.rol,
+              EXISTS(SELECT 1 FROM payments p WHERE p.user_id = u.id) AS tiene_pagos
+       FROM users u WHERE u.id = $1`,
+      [userId]
+    );
+    const user = current.rows[0];
+    if (!user) {
+      return res.status(404).json({ ok: false, message: "Usuario no encontrado" });
+    }
+    if (user.tiene_pagos) {
+      return res.status(409).json({
+        ok: false,
+        message: "Este cliente tiene pagos registrados. Bloquéalo para conservar el historial financiero."
+      });
+    }
+    if (user.rol === "admin") {
+      const admins = await pool.query(
+        "SELECT COUNT(*)::INT AS total FROM users WHERE rol='admin' AND estado='activo'"
+      );
+      if (admins.rows[0].total <= 1) {
+        return res.status(409).json({
+          ok: false,
+          message: "Debe quedar al menos un administrador activo"
+        });
+      }
+    }
+
+    client = await pool.connect();
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE automation_jobs SET estado='cancelado', fecha_actualizacion=NOW()
+       WHERE tipo='subscription_reminder'
+         AND payload->>'subscriptionId' IN (
+           SELECT id::TEXT FROM subscriptions WHERE user_id=$1
+         )
+         AND estado IN ('pendiente','fallido')`,
+      [userId]
+    );
+    const result = await client.query(
+      "DELETE FROM users WHERE id=$1 RETURNING id,nombre,email",
+      [userId]
+    );
+    await client.query("COMMIT");
+    return res.json({ ok: true, data: result.rows[0] });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    return next(error);
+  } finally {
+    client?.release();
+  }
+};

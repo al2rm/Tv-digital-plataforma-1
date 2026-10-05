@@ -46,6 +46,7 @@ export const scheduleSubscriptionReminders = async (subscriptionId) => {
          (3, 'vencido_3_dias')
      ) AS reminder(offset_days, template_key)
      WHERE s.id = $1
+       AND s.estado = 'activa'
        AND u.telefono IS NOT NULL
        AND u.whatsapp_opt_in_at IS NOT NULL
        AND u.whatsapp_opt_out_at IS NULL
@@ -121,7 +122,8 @@ export const processDueJobs = async (batchSize = env.automation.batchSize) => {
   await pool.query(
     `UPDATE subscriptions
      SET estado = 'vencida', fecha_actualizacion = NOW()
-     WHERE estado = 'activa' AND fecha_fin < CURRENT_DATE`
+     WHERE estado = 'activa'
+       AND fecha_fin < (NOW() AT TIME ZONE 'America/Asuncion')::date`
   );
 
   const claimed = await pool.query(
