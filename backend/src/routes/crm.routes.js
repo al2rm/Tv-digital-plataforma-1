@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createLead,
   crmDashboard,
+  deleteLead,
   getLead,
   listLeads,
   updateLead
@@ -17,5 +18,6 @@ router.get("/leads", listLeads);
 router.post("/leads", createLead);
 router.get("/leads/:id", getLead);
 router.put("/leads/:id", updateLead);
+router.delete("/leads/:id", deleteLead);
 
 export default router;

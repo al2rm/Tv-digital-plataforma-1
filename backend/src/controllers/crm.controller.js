@@ -230,6 +230,21 @@ export const updateLead = async (req, res, next) => {
   }
 };
 
+export const deleteLead = async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      "DELETE FROM leads WHERE id=$1 RETURNING id,nombre,telefono",
+      [req.params.id]
+    );
+    if (!result.rowCount) {
+      return res.status(404).json({ ok: false, message: "Lead no encontrado" });
+    }
+    return res.json({ ok: true, data: result.rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const crmDashboard = async (req, res, next) => {
   try {
     const [stages, pendingMessages, expiring, revenue, sources] =
@@ -248,7 +263,8 @@ export const crmDashboard = async (req, res, next) => {
           `SELECT COUNT(*)::INT AS total
            FROM subscriptions
            WHERE estado = 'activa'
-             AND fecha_fin BETWEEN CURRENT_DATE AND CURRENT_DATE + 5`
+             AND fecha_fin BETWEEN (NOW() AT TIME ZONE 'America/Asuncion')::date
+                               AND (NOW() AT TIME ZONE 'America/Asuncion')::date + 5`
         ),
         pool.query(
           `SELECT COALESCE(SUM(monto), 0) AS total

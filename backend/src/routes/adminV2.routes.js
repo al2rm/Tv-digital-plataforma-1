@@ -1,11 +1,17 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { adminMiddleware } from "../middlewares/adminMiddleware.js";
-import { listUsers, createUser, updateUser } from "../controllers/adminUsers.controller.js";
+import { listUsers, createUser, updateUser, deleteUser } from "../controllers/adminUsers.controller.js";
 import {
   createSubscription,
   createPayment,
+  createPlan,
+  deletePayment,
+  deletePlan,
+  deleteSubscription,
   updatePlan,
+  updatePayment,
+  updateSubscription,
   listPlans,
   listPayments,
   listSubscriptions,
@@ -35,12 +41,19 @@ router.use(authMiddleware, adminMiddleware);
 router.get("/users", listUsers);
 router.post("/users", createUser);
 router.put("/users/:id", updateUser);
+router.delete("/users/:id", deleteUser);
 router.get("/payments", listPayments);
 router.post("/payments", createPayment);
+router.put("/payments/:id", updatePayment);
+router.delete("/payments/:id", deletePayment);
+router.post("/plans", createPlan);
 router.put("/plans/:id", updatePlan);
+router.delete("/plans/:id", deletePlan);
 router.get("/subscriptions", listSubscriptions);
 router.get("/plans", listPlans);
 router.post("/subscriptions", createSubscription);
+router.put("/subscriptions/:id", updateSubscription);
+router.delete("/subscriptions/:id", deleteSubscription);
 router.post("/subscriptions/:id/renew", renewSubscription);
 router.get("/automations/jobs", listAutomationJobs);
 router.post("/automations/run", runAutomations);

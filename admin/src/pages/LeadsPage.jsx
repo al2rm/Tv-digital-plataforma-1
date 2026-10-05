@@ -1,6 +1,7 @@
-import { MessageCircle, Plus, Search } from "lucide-react";
+import { MessageCircle, Plus, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import DataTable from "../components/DataTable";
+import DeleteConfirmationModal from "../components/DeleteConfirmationModal";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import api, { apiError } from "../services/api";
@@ -44,6 +45,8 @@ export default function LeadsPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,6 +111,22 @@ export default function LeadsPage() {
       await load();
     } catch (stageError) {
       setError(apiError(stageError, "No se pudo cambiar la etapa"));
+    }
+  };
+
+  const remove = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api.delete(`/crm/leads/${deleteTarget.id}`);
+      setNotice(`Lead “${deleteTarget.nombre}” eliminado.`);
+      setDeleteTarget(null);
+      await load();
+    } catch (deleteError) {
+      setError(apiError(deleteError, "No se pudo eliminar el lead"));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -253,6 +272,14 @@ export default function LeadsPage() {
                 >
                   Editar
                 </button>
+                <button
+                  type="button"
+                  className="mini-button mini-button--danger"
+                  onClick={() => { setError(""); setDeleteTarget(lead); }}
+                >
+                  <Trash2 size={15} />
+                  Eliminar
+                </button>
               </>
             )}
           />
@@ -342,6 +369,17 @@ export default function LeadsPage() {
             </div>
           </form>
         </Modal>
+      ) : null}
+      {deleteTarget ? (
+        <DeleteConfirmationModal
+          title="Eliminar lead"
+          name={deleteTarget.nombre}
+          description="Se eliminarán su ficha, eventos y vínculo de WhatsApp. Los mensajes ya registrados se conservarán sin asociar para auditoría."
+          deleting={deleting}
+          error={error}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void remove()}
+        />
       ) : null}
     </>
   );
