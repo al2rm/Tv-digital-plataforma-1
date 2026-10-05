@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Aplicar diseño Android TV autorizado
-        run: git apply tv-android.patch
+        run: git apply tv-android-v2.patch
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
