@@ -35,6 +35,7 @@ jobs:
           cache: npm
           cache-dependency-path: admin/package-lock.json
       - run: npm ci
+      - run: node --test tests/*.test.js
       - run: npm run build
 
   production-smoke:
