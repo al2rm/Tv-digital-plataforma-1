@@ -544,6 +544,38 @@ p {
   margin-left: auto;
 }
 
+.bulk-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.018);
+  margin-bottom: 14px;
+  padding: 12px 14px;
+}
+
+.bulk-selection-bar--active {
+  border-color: rgba(85, 164, 255, 0.38);
+  background: rgba(47, 128, 237, 0.08);
+}
+
+.bulk-selection-bar strong,
+.bulk-selection-bar span {
+  display: block;
+}
+
+.bulk-selection-bar strong {
+  color: #eef6ff;
+  font-size: 12px;
+}
+
+.bulk-selection-bar span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
 .search-field {
   display: flex;
   width: min(100%, 420px);
@@ -643,6 +675,24 @@ tbody tr {
 
 tbody tr:hover {
   background: rgba(47, 128, 237, 0.035);
+}
+
+tbody tr.table-row--selected {
+  background: rgba(47, 128, 237, 0.09);
+}
+
+.selection-cell {
+  width: 48px;
+  text-align: center;
+}
+
+.selection-cell input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
 }
 
 tbody tr:last-child td {
@@ -1384,6 +1434,15 @@ tbody tr:last-child td {
 
   .toolbar__import {
     margin-left: 0;
+  }
+
+  .bulk-selection-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bulk-selection-bar .button-row > button {
+    flex: 1 1 auto;
   }
 }
 
