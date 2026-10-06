@@ -108,13 +108,14 @@ const tvgCountryCode = (tvgId) => {
 
 const PAY_TV_BRAND = /\b(?:adult\s*swim|amc|disney|espn|fox\s*sports|hbo(?:\s+max)?|paramount|star\s*channel|tigo\s*sports|warner)\b/i;
 
-export const trialEligibilityFor = (channel, countryCode) => {
+export const trialEligibilityFor = (channel, countryCode, { allowHttp = env.allowHttpStreams } = {}) => {
   const expectedCountry = normalizeCountryCode(countryCode);
   if (!channel.compatible || !channel.manifestUrl) {
     return { eligible: false, reason: channel.incompatibilityReason || "La fuente no es compatible" };
   }
-  if (new URL(channel.manifestUrl).protocol !== "https:") {
-    return { eligible: false, reason: "La prueba pública admite únicamente señales HTTPS" };
+  const protocol = new URL(channel.manifestUrl).protocol;
+  if (!(protocol === "https:" || (allowHttp && protocol === "http:"))) {
+    return { eligible: false, reason: "HTTP no está habilitado en el servidor; utiliza una fuente HTTPS" };
   }
   if (tvgCountryCode(channel.tvgId) !== expectedCountry) {
     return { eligible: false, reason: "La señal no pertenece al país seleccionado" };

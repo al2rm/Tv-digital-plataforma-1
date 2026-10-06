@@ -38,13 +38,13 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
  });
  await t.test('el admin previsualiza e importa Paraguay con cabeceras de reproducción',async()=>{
   const originalFetch=globalThis.fetch;
-  const playlist=`#EXTM3U\n#EXTINF:-1 tvg-id="NPY.py",NPY prueba\n#EXTVLCOPT:http-referrer=https://www.npy.com.py/\nhttps://8.8.8.8/npy/playlist.m3u8`;
+  let playlist=`#EXTM3U\n#EXTINF:-1 tvg-id="NPY.py",NPY prueba\n#EXTVLCOPT:http-referrer=https://www.npy.com.py/\nhttps://8.8.8.8/npy/playlist.m3u8`;
   globalThis.fetch=async(input,options={})=>{
    const target=String(input);
    if(target==='https://iptv-org.github.io/api/countries.json')return new Response(JSON.stringify([{name:'Paraguay',code:'PY',flag:'🇵🇾'},{name:'Argentina',code:'AR',flag:'🇦🇷'}]),{status:200,headers:{'Content-Type':'application/json'}});
    if(target==='https://iptv-org.github.io/iptv/countries/py.m3u')return new Response(playlist,{status:200,headers:{'Content-Type':'audio/x-mpegurl'}});
    if(target==='https://iptv-org.github.io/iptv/countries/ar.m3u')return new Response('#EXTM3U\n#EXTINF:-1 tvg-id="AR.test",Señal Argentina\nhttps://8.8.4.4/ar/playlist.m3u8',{status:200,headers:{'Content-Type':'audio/x-mpegurl'}});
-   if(target==='https://8.8.8.8/npy/playlist.m3u8')return new Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\nsegment-1.ts',{status:200,headers:{'Content-Type':'application/vnd.apple.mpegurl'}});
+   if(target==='http://8.8.4.4/http/playlist.m3u8'||target==='https://8.8.8.8/npy/playlist.m3u8')return new Response('#EXTM3U\n#EXT-X-TARGETDURATION:6\nsegment-1.ts',{status:200,headers:{'Content-Type':'application/vnd.apple.mpegurl'}});
    return originalFetch(input,options);
   };
   try{
@@ -60,6 +60,15 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
    assert.equal(session.status,200);assert.equal(session.data.streamHeaders.Referer,'https://www.npy.com.py/');
    const repeated=await request('/admin/v2/content/import/iptv-org/py/preview',{token:admin});
    assert.equal(repeated.data.summary.existing,1);
+   playlist+='\n#EXTINF:-1 tvg-id="LocalHTTP.py",Canal HTTP prueba\nhttp://8.8.4.4/http/playlist.m3u8';
+   const httpPreview=await request('/admin/v2/content/import/iptv-org/py/preview',{token:admin});
+   const httpChannel=httpPreview.data.items.find(channel=>channel.name==='Canal HTTP prueba');
+   assert.equal(httpChannel.trialEligible,true);
+   const httpImport=await request('/admin/v2/content/import/iptv-org/py',{method:'POST',token:admin,body:{sourceIds:[httpChannel.sourceId]}});
+   assert.equal(httpImport.status,201);assert.equal(httpImport.data.imported.length,1);
+   const httpPlayback=await request(`/playback/session/channel:${httpImport.data.imported[0].id}`,{token:admin});
+   assert.equal(httpPlayback.status,200);assert.equal(httpPlayback.data.manifestUrl,'http://8.8.4.4/http/playlist.m3u8');
+
   }finally{globalThis.fetch=originalFetch;}
  });
  await t.test('el cliente no puede administrar ni ver fuentes en el catálogo',async()=>{
@@ -67,7 +76,7 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   category=(await request('/admin/v2/content/categories',{method:'POST',token:admin,body:{nombre:'Pruebas',slug:'pruebas'}})).data;
   content=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Canal autorizado de prueba',category_id:category.id,manifest_url:'https://example.test/demo.m3u8',activo:true}})).data;
   const catalog=await request('/catalog/channels',{token:client});assert.equal(catalog.status,200);
-  assert.equal(catalog.data.items[0].groupId,`channel:${content.id}`);assert.equal(JSON.stringify(catalog.data).includes('manifest_url'),false);
+  assert.equal(catalog.data.items.some(item=>item.groupId===`channel:${content.id}`),true);assert.equal(JSON.stringify(catalog.data).includes('manifest_url'),false);
   assert.equal((await request('/catalog/channels')).status,401);
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,403);
  });

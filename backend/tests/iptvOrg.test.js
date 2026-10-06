@@ -38,13 +38,17 @@ test("construye únicamente rutas de países válidas", () => {
   assert.throws(() => countryPlaylistUrl("../../admin"), /país seleccionado/);
 });
 
-test("el catálogo público de prueba admite solo señales locales por HTTPS", () => {
+test("el catálogo público admite HTTPS y HTTP según la configuración del servidor", () => {
   const local = parseM3u(playlist)[0];
   assert.equal(trialEligibilityFor(local, "py").eligible, true);
   assert.match(trialEligibilityFor(local, "ar").reason, /no pertenece/);
 
   const httpLocal = parseM3u(`#EXTM3U\n#EXTINF:-1 tvg-id="Local.py",Local\nhttp://video.test/local.m3u8`, { allowHttp: true })[0];
-  assert.match(trialEligibilityFor(httpLocal, "py").reason, /únicamente señales HTTPS/);
+  assert.match(trialEligibilityFor(httpLocal, "py", { allowHttp: false }).reason, /HTTP no está habilitado/);
+  assert.equal(trialEligibilityFor(httpLocal, "py", { allowHttp: true }).eligible, true);
+  assert.equal(trialEligibilityFor(local, "py", { allowHttp: false }).eligible, true);
+  const invalid = { ...local, manifestUrl: 'ftp://video.test/live.m3u8' };
+  assert.equal(trialEligibilityFor(invalid, "py", { allowHttp: true }).eligible, false);
 
   const foreignPremium = parseM3u(`#EXTM3U\n#EXTINF:-1 tvg-id="Premium.us@Panregional",Premium\nhttps://video.test/premium.m3u8`)[0];
   assert.match(trialEligibilityFor(foreignPremium, "py").reason, /no pertenece/);
