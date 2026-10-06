@@ -1,4 +1,4 @@
-export default function DataTable({ columns, rows, actions }) {
+export default function DataTable({ columns, rows, actions, selection }) {
   if (!rows.length) {
     return <div className="empty-inline"><strong>Sin registros</strong></div>;
   }
@@ -7,6 +7,19 @@ export default function DataTable({ columns, rows, actions }) {
       <table>
         <thead>
           <tr>
+            {selection ? (
+              <th className="selection-cell">
+                <input
+                  ref={(input) => {
+                    if (input) input.indeterminate = selection.someSelected && !selection.allSelected;
+                  }}
+                  type="checkbox"
+                  aria-label={selection.selectAllLabel || "Seleccionar todos"}
+                  checked={selection.allSelected}
+                  onChange={(event) => selection.onToggleAll(event.target.checked)}
+                />
+              </th>
+            ) : null}
             {columns.map((column) => (
               <th key={column.key}>{column.label}</th>
             ))}
@@ -15,7 +28,17 @@ export default function DataTable({ columns, rows, actions }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} className={selection?.selectedIds.has(row.id) ? "table-row--selected" : undefined}>
+              {selection ? (
+                <td className="selection-cell" data-label="Elegir">
+                  <input
+                    type="checkbox"
+                    aria-label={`${selection.rowLabel || "Seleccionar"} ${row.nombre || row.titulo || row.id}`}
+                    checked={selection.selectedIds.has(row.id)}
+                    onChange={() => selection.onToggle(row.id)}
+                  />
+                </td>
+              ) : null}
               {columns.map((column) => (
                 <td key={column.key} data-label={column.label}>
                   {column.render

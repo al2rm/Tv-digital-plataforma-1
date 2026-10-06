@@ -139,6 +139,15 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request(`/playback/session/channel:${temporaryChannel.id}`,{token:client})).status,404);
   assert.equal((await request(`/admin/v2/content/live_channels/${temporaryChannel.id}`,{method:'DELETE',token:admin})).status,404);
  });
+ await t.test('elimina varios canales seleccionados en una sola operación',async()=>{
+  const first=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Canal masivo uno',manifest_url:'https://example.test/bulk-1.m3u8',activo:true}})).data;
+  const second=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Canal masivo dos',manifest_url:'https://example.test/bulk-2.m3u8',activo:true}})).data;
+  const removed=await request('/admin/v2/content/live_channels',{method:'DELETE',token:admin,body:{ids:[first.id,second.id]}});
+  assert.equal(removed.status,200);assert.equal(removed.data.deleted.length,2);assert.equal(removed.data.missing,0);
+  const after=await request('/admin/v2/content/live_channels',{token:admin});
+  assert.equal(after.data.some(item=>item.id===first.id||item.id===second.id),false);
+  assert.equal((await request('/admin/v2/content/live_channels',{method:'DELETE',token:admin,body:{ids:[]}})).status,400);
+ });
  await t.test('vencimiento y fecha futura bloquean nuevas reproducciones',async()=>{
   await query("UPDATE subscriptions SET fecha_inicio=(NOW() AT TIME ZONE 'America/Asuncion')::date-50,fecha_fin=(NOW() AT TIME ZONE 'America/Asuncion')::date-1 WHERE id=$1",[subscription.id]);
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,403);

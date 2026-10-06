@@ -42,3 +42,18 @@ export const deleteContent=async(req,res,next)=>{try{
  if(!r.rowCount)return res.status(404).json({ok:false,message:'Registro no encontrado'});
  res.json({ok:true,message:'Registro eliminado',data:r.rows[0]});
 }catch(e){next(e);}};
+export const deleteContentBatch=async(req,res,next)=>{try{
+ fieldsFor(req.params.kind);
+ if(!Array.isArray(req.body?.ids)||req.body.ids.length===0)throw fail('Selecciona al menos un registro');
+ const ids=[...new Set(req.body.ids.map(Number))];
+ if(ids.length>500)throw fail('Puedes eliminar hasta 500 registros por vez');
+ if(ids.some(id=>!Number.isSafeInteger(id)||id<=0))throw fail('La selección contiene registros inválidos');
+ const placeholders=ids.map((_,index)=>`$${index+1}`).join(',');
+ const r=await pool.query(`DELETE FROM ${req.params.kind} WHERE id IN (${placeholders}) RETURNING *`,ids);
+ if(!r.rowCount)return res.status(404).json({ok:false,message:'Los registros seleccionados ya no existen'});
+ res.json({
+  ok:true,
+  message:`${r.rowCount} registro${r.rowCount===1?'':'s'} eliminado${r.rowCount===1?'':'s'}`,
+  data:{deleted:r.rows,requested:ids.length,missing:ids.length-r.rowCount}
+ });
+}catch(e){next(e);}};
