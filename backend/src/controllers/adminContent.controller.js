@@ -1,9 +1,9 @@
 import { pool } from '../database/db.js';
 import { env } from '../config/env.js';
 const allowed={
- movies:['category_id','titulo','descripcion','poster_url','banner_url','manifest_url','license_url','drm_type','anio','duracion_min','clasificacion','destacado','activo'],
+ movies:['category_id','titulo','descripcion','poster_url','banner_url','manifest_url','fallback_manifest_url','license_url','drm_type','anio','duracion_min','clasificacion','destacado','activo'],
  series:['category_id','titulo','descripcion','poster_url','banner_url','anio','clasificacion','destacado','activo'],
- live_channels:['category_id','nombre','logo_url','manifest_url','license_url','drm_type','numero_canal','activo'],
+ live_channels:['category_id','nombre','logo_url','manifest_url','fallback_manifest_url','license_url','drm_type','numero_canal','activo'],
  categories:['nombre','slug','tipo','activo']
 };
 const fail=message=>Object.assign(new Error(message),{statusCode:400});
@@ -13,7 +13,7 @@ function validate(kind,body){
  const title=['movies','series'].includes(kind)?'titulo':'nombre';
  if(typeof body[title]!=='string'||!body[title].trim())throw fail('El nombre es obligatorio');
  if(kind==='categories'&&!/^[a-z0-9-]+$/.test(body.slug||''))throw fail('El identificador debe usar letras minúsculas, números o guiones');
- for(const key of ['manifest_url','license_url','logo_url','poster_url','banner_url']){
+ for(const key of ['manifest_url','fallback_manifest_url','license_url','logo_url','poster_url','banner_url']){
   if(!body[key])continue;
   const allowHttp=env.allowHttpStreams&&key!=='license_url';
   try{const u=new URL(body[key]);if(!(u.protocol==='https:'||(allowHttp&&u.protocol==='http:'))||u.username||u.password)throw new Error();}

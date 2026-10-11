@@ -83,7 +83,7 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
   const providerColumns=table==='live_channels'?`,c.xtream_provider_id,c.xtream_stream_id,c.xtream_container,
    p.base_url,p.username_encrypted,p.password_encrypted,p.user_agent,p.referer,p.preferred_output`:'';
   const providerJoin=table==='live_channels'?' LEFT JOIN xtream_providers p ON p.id=c.xtream_provider_id AND p.activo':'';
-  const result=await pool.query(`SELECT c.manifest_url,c.license_url,c.drm_type,c.stream_headers${providerColumns}
+  const result=await pool.query(`SELECT c.manifest_url,c.fallback_manifest_url,c.license_url,c.drm_type,c.stream_headers${providerColumns}
    FROM ${table} c LEFT JOIN categories k ON k.id=c.category_id${providerJoin}
    WHERE c.id=$1 AND c.activo AND (k.id IS NULL OR k.activo)`,[match[2]]);
   const content=result.rows[0];
@@ -102,7 +102,12 @@ router.get('/playback/session/:contentId',async(req,res,next)=>{
    mimeType=manifest.split('?')[0].endsWith('.mpd')?'application/dash+xml':manifest.split('?')[0].endsWith('.m3u8')?'application/x-mpegURL':null;
   }
   const license=content.drm_type==='widevine'?validMediaUrl(content.license_url,false):null;
-  res.json({ok:true,data:{contentId:req.params.contentId,manifestUrl:manifest,
+  const fallbackUrls=[];
+  if(!content.xtream_provider_id&&content.fallback_manifest_url){
+   const fallback=validMediaUrl(content.fallback_manifest_url,env.allowHttpStreams);
+   if(fallback!==manifest)fallbackUrls.push(fallback);
+  }
+  res.json({ok:true,data:{contentId:req.params.contentId,manifestUrl:manifest,fallbackUrls,
    mimeType,
    streamHeaders:content.xtream_provider_id?providerPlaybackHeaders(content):validStreamHeaders(content.stream_headers),drm:license?{scheme:'widevine',licenseUrl:license,licenseHeaders:{}}:null}});
  }catch(e){next(e);}

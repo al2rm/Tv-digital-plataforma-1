@@ -14,6 +14,11 @@ class LoginActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (SessionStore.restore(this)) {
+            startActivity(Intent(this, CatalogActivity::class.java))
+            finish()
+            return
+        }
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.serverInput.setText(getPreferences(MODE_PRIVATE).getString("server", BuildConfig.BACKEND_BASE_URL).orEmpty().replace("https://example.invalid/", ""))
@@ -34,10 +39,8 @@ class LoginActivity : Activity() {
                 if (isDestroyed || isFinishing) return@runOnUiThread
                 binding.loginButton.isEnabled = true
                 result.onSuccess { data ->
-                    SessionStore.baseUrl = base
-                    SessionStore.token = data.getString("token")
-                    SessionStore.userId = data.getJSONObject("user").get("id").toString()
-                    SessionStore.name = data.getJSONObject("user").getString("nombre")
+                    val user = data.getJSONObject("user")
+                    SessionStore.save(this, base, data.getString("token"), user.get("id").toString(), user.getString("nombre"))
                     getPreferences(MODE_PRIVATE).edit().putString("server", base).apply()
                     binding.passwordInput.text.clear()
                     startActivity(Intent(this, CatalogActivity::class.java))

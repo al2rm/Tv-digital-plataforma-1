@@ -8,10 +8,12 @@ data class PlaybackSession(
     val manifestUrl: String,
     val mimeType: String?,
     val streamHeaders: Map<String, String>,
-    val drm: DrmConfig?
+    val drm: DrmConfig?,
+    val fallbackUrls: List<String> = emptyList()
 ) {
     init {
         requirePlaybackUrl(manifestUrl, "manifestUrl", BuildConfig.ALLOW_HTTP_STREAMS)
+        fallbackUrls.forEach { requirePlaybackUrl(it, "fallbackUrl", BuildConfig.ALLOW_HTTP_STREAMS) }
         drm?.let { requirePlaybackUrl(it.licenseUrl, "licenseUrl", false) }
     }
 
@@ -23,6 +25,11 @@ data class PlaybackSession(
 
     fun playbackCandidates(): List<PlaybackSession> {
         if (drm != null) return listOf(this)
+        val sources = listOf(manifestUrl) + fallbackUrls
+        return sources.flatMap { url -> copy(manifestUrl = url, fallbackUrls = emptyList()).formatCandidates() }.distinctBy { it.manifestUrl }
+    }
+
+    private fun formatCandidates(): List<PlaybackSession> {
 
         val hlsUrl = manifestUrl.replace(MPEG_TS_SUFFIX, ".m3u8")
         if (hlsUrl != manifestUrl) {
@@ -76,7 +83,10 @@ data class PlaybackSession(
                         licenseUrl = it.getString("licenseUrl"),
                         licenseHeaders = it.optJSONObject("licenseHeaders").toStringMap()
                     )
-                }
+                },
+                fallbackUrls = data.optJSONArray("fallbackUrls")?.let { array ->
+                    buildList { for (index in 0 until array.length()) add(array.getString(index)) }
+                }.orEmpty()
             )
         }
 

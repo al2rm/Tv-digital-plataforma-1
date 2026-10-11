@@ -121,6 +121,10 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal(result.status,201);subscription=result.data.subscription;
   assert.equal((await request('/app/account',{token:client})).data.canPlay,true);
   const playback=await request(`/playback/session/channel:${content.id}`,{token:client});assert.equal(playback.status,200);assert.equal(playback.data.manifestUrl,'https://example.test/demo.m3u8');
+  const updated=await request(`/admin/v2/content/live_channels/${content.id}`,{method:'PUT',token:admin,body:{nombre:'Canal autorizado de prueba',fallback_manifest_url:'https://backup.example.test/demo.m3u8'}});
+  assert.equal(updated.status,200);
+  const withFallback=await request(`/playback/session/channel:${content.id}`,{token:client});
+  assert.deepEqual(withFallback.data.fallbackUrls,['https://backup.example.test/demo.m3u8']);
  });
  await t.test('HTTPS, DRM y ocultación se validan',async()=>{
   const cleartext=await request('/admin/v2/content/movies',{method:'POST',token:admin,body:{titulo:'HTTP permitido',manifest_url:'http://example.test/video.mp4'}});assert.equal(cleartext.status,201);
