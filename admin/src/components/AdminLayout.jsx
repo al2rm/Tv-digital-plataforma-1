@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Radio,
   RefreshCw,
+  History,
   Users,
   X
 } from "lucide-react";
@@ -16,14 +17,15 @@ import { useAuth } from "../context/AuthContext";
 import { AppLink } from "../context/RouterContext";
 
 const navigation = [
-  { to: "/", label: "Resumen", icon: BarChart3, end: true },
-  { to: "/leads", label: "Ventas CRM", icon: Radio },
-  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
-  { to: "/usuarios", label: "Clientes", icon: Users },
-  { to: "/suscripciones", label: "Suscripciones", icon: RefreshCw },
-  { to: "/pagos", label: "Pagos", icon: CreditCard },
-  { to: "/catalogo", label: "Catálogo", icon: Tv },
-  { to: "/conexion", label: "App y proveedor", icon: Link }
+  { to: "/", label: "Resumen", icon: BarChart3, end: true, roles:['admin','vendedor','soporte'] },
+  { to: "/leads", label: "Ventas CRM", icon: Radio, roles:['admin','vendedor'] },
+  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, roles:['admin','vendedor'] },
+  { to: "/usuarios", label: "Clientes", icon: Users, roles:['admin','vendedor','soporte'] },
+  { to: "/suscripciones", label: "Suscripciones", icon: RefreshCw, roles:['admin','vendedor'] },
+  { to: "/pagos", label: "Pagos", icon: CreditCard, roles:['admin','vendedor'] },
+  { to: "/catalogo", label: "Catálogo", icon: Tv, roles:['admin','soporte'] },
+  { to: "/conexion", label: "App y proveedor", icon: Link, roles:['admin'] },
+  { to: "/actividad", label: "Actividad y papelera", icon: History, roles:['admin'] }
 ];
 
 export default function AdminLayout({ children }) {
@@ -68,7 +70,7 @@ export default function AdminLayout({ children }) {
         </div>
 
         <nav className="sidebar-nav" aria-label="Navegación principal">
-          {navigation.map(({ to, label, icon: Icon, end }) => (
+          {navigation.filter(item=>item.roles.includes(user?.rol)).map(({ to, label, icon: Icon, end }) => (
             <AppLink
               key={to}
               to={to}
@@ -89,7 +91,7 @@ export default function AdminLayout({ children }) {
             <span>{user?.nombre?.[0]?.toUpperCase() || "A"}</span>
             <div>
               <strong>{user?.nombre || "Administrador"}</strong>
-              <small>{user?.email}</small>
+              <small>{user?.rol} · {user?.email}</small>
             </div>
           </div>
           <button type="button" className="logout-button" onClick={logout}>

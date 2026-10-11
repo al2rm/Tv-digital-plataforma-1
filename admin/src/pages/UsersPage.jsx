@@ -5,6 +5,7 @@ import DeleteConfirmationModal from "../components/DeleteConfirmationModal";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import api, { apiError } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 const emptyForm = {
   nombre: "",
@@ -17,6 +18,7 @@ const emptyForm = {
 };
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
@@ -166,9 +168,9 @@ export default function UsersPage() {
             <button type="button" className="mini-button" onClick={() => toggleConsent(user)}>
               {user.whatsapp_opt_in_at ? "Quitar permiso" : "Registrar permiso"}
             </button>
-            <button type="button" className="mini-button mini-button--danger" onClick={() => { setError(""); setDeleteTarget(user); }}>
+            {currentUser?.rol==='admin'&&<button type="button" className="mini-button mini-button--danger" onClick={() => { setError(""); setDeleteTarget(user); }}>
               <Trash2 size={15}/>Eliminar
-            </button></div>
+            </button>}</div>
           )}
         />
       </section>
@@ -217,9 +219,12 @@ export default function UsersPage() {
               Rol
               <select
                 value={form.rol}
+                disabled={currentUser?.rol!=='admin'}
                 onChange={(event) => setForm({ ...form, rol: event.target.value })}
               >
                 <option value="cliente">Cliente</option>
+                <option value="vendedor">Vendedor</option>
+                <option value="soporte">Soporte</option>
                 <option value="admin">Administrador</option>
               </select>
             </label>

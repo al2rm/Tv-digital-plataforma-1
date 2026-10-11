@@ -30,9 +30,12 @@ export const createUser = async (req, res, next) => {
     if (!nombre || !email || !password || password.length < 6) {
       return res.status(400).json({ ok:false, message:"Datos inválidos" });
     }
-    if (!["cliente", "admin"].includes(rol) ||
+    if (!["cliente", "admin", "vendedor", "soporte"].includes(rol) ||
         !["activo", "inactivo", "bloqueado"].includes(estado)) {
       return res.status(400).json({ ok:false, message:"Rol o estado inválido" });
+    }
+    if (req.auth.rol !== "admin" && rol !== "cliente") {
+      return res.status(403).json({ok:false,message:"Solo un administrador puede crear personal o administradores"});
     }
     const passwordHash = await hashPassword(password);
     const result = await pool.query(
@@ -62,8 +65,11 @@ export const createUser = async (req, res, next) => {
 export const updateUser = async (req, res, next) => {
   try {
     const { nombre, telefono, rol, estado, consentimientoWhatsapp } = req.body;
-    if (rol && !["cliente", "admin"].includes(rol)) {
+    if (rol && !["cliente", "admin", "vendedor", "soporte"].includes(rol)) {
       return res.status(400).json({ ok:false, message:"Rol inválido" });
+    }
+    if (req.auth.rol !== "admin" && rol && rol !== "cliente") {
+      return res.status(403).json({ok:false,message:"Solo un administrador puede cambiar permisos"});
     }
     if (estado && !["activo", "inactivo", "bloqueado"].includes(estado)) {
       return res.status(400).json({ ok:false, message:"Estado inválido" });

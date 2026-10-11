@@ -151,6 +151,11 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request('/admin/v2/content/live_channels',{token:admin})).data.some(item=>item.id===temporaryChannel.id),false);
   assert.equal((await request(`/playback/session/channel:${temporaryChannel.id}`,{token:client})).status,404);
   assert.equal((await request(`/admin/v2/content/live_channels/${temporaryChannel.id}`,{method:'DELETE',token:admin})).status,404);
+  const recycled=await request('/admin/v2/recycle-bin',{token:admin});
+  const archivedChannel=recycled.data.find(item=>item.entity_type==='live_channels'&&item.entity_id===temporaryChannel.id);
+  assert.ok(archivedChannel);
+  assert.equal((await request(`/admin/v2/recycle-bin/${archivedChannel.id}/restore`,{method:'POST',token:admin})).status,200);
+  assert.equal((await request('/admin/v2/content/live_channels',{token:admin})).data.some(item=>item.id===temporaryChannel.id),true);
  });
  await t.test('elimina varios canales seleccionados en una sola operación',async()=>{
   const first=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Canal masivo uno',manifest_url:'https://example.test/bulk-1.m3u8',activo:true}})).data;
@@ -183,6 +188,17 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request('/admin/v2/payments',{method:'POST',token:admin,body:{userId:user.id,monto:0}})).status,400);
   assert.equal((await request('/admin/v2/payments',{method:'POST',token:admin,body:{userId:user.id,monto:30000}})).status,201);
   const price=await request('/admin/v2/plans/1',{method:'PUT',token:admin,body:{precio:30000}});assert.equal(price.status,200);assert.equal(Number(price.data.precio),30000);
+ });
+ await t.test('aplica permisos de vendedor y soporte',async()=>{
+  const seller=(await request('/admin/v2/users',{method:'POST',token:admin,body:{nombre:'Vendedor prueba',email:'vendedor@example.test',password,rol:'vendedor'}})).data;
+  const helper=(await request('/admin/v2/users',{method:'POST',token:admin,body:{nombre:'Soporte prueba',email:'soporte@example.test',password,rol:'soporte'}})).data;
+  const sellerToken=(await request('/auth/login',{method:'POST',body:{email:seller.email,password}})).data.token;
+  const supportToken=(await request('/auth/login',{method:'POST',body:{email:helper.email,password}})).data.token;
+  assert.equal((await request('/admin/v2/subscriptions',{token:sellerToken})).status,200);
+  assert.equal((await request('/admin/v2/content/live_channels',{method:'POST',token:sellerToken,body:{nombre:'No autorizado'}})).status,403);
+  assert.equal((await request('/admin/v2/content/live_channels',{method:'POST',token:supportToken,body:{nombre:'Canal soporte',activo:false}})).status,201);
+  assert.equal((await request('/admin/v2/payments',{method:'POST',token:supportToken,body:{userId:user.id,monto:1000}})).status,403);
+  assert.equal((await request('/admin/v2/activity',{token:sellerToken})).status,403);
  });
  await t.test('bloqueo y cambio de rol se aplican incluso con token previo',async()=>{
   await request(`/admin/v2/users/${user.id}`,{method:'PUT',token:admin,body:{estado:'bloqueado'}});
