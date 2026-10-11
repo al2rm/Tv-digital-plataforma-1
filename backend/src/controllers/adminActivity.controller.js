@@ -1,7 +1,7 @@
 import { pool } from '../database/db.js';
 
-const restorable={users:'users',subscriptions:'subscriptions',payments:'payments',plans:'plans',categories:'categories',movies:'movies',series:'series',live_channels:'live_channels'};
-const labels={users:'Cliente',subscriptions:'Suscripción',payments:'Pago',plans:'Plan',categories:'Categoría',movies:'Película',series:'Serie',live_channels:'Canal'};
+const restorable={users:'users',subscriptions:'subscriptions',payments:'payments',plans:'plans',categories:'categories',movies:'movies',series:'series',series_episodes:'series_episodes',epg_programs:'epg_programs',live_channels:'live_channels'};
+const labels={users:'Cliente',subscriptions:'Suscripción',payments:'Pago',plans:'Plan',categories:'Categoría',movies:'Película',series:'Serie',series_episodes:'Episodio',epg_programs:'Programa EPG',live_channels:'Canal'};
 const validId=value=>Number.isSafeInteger(Number(value))&&Number(value)>0;
 
 export const listActivity=async(req,res,next)=>{try{
@@ -34,15 +34,15 @@ export const purgeRecycleItem=async(req,res,next)=>{try{
 }catch(error){next(error);}};
 
 export const downloadBackup=async(req,res,next)=>{try{
- const [users,subscriptions,payments,plans,categories,channels,movies,series]=await Promise.all([
+ const [users,subscriptions,payments,plans,categories,channels,movies,series,episodes,epg]=await Promise.all([
   pool.query(`SELECT id,nombre,email,telefono,rol,estado,fecha_creacion,fecha_actualizacion,ultimo_acceso,whatsapp_opt_in_at,whatsapp_opt_out_at FROM users ORDER BY id`),
   pool.query(`SELECT * FROM subscriptions ORDER BY id`),pool.query(`SELECT * FROM payments ORDER BY id`),
   pool.query(`SELECT * FROM plans ORDER BY id`),pool.query(`SELECT * FROM categories ORDER BY id`),
   pool.query(`SELECT id,category_id,nombre,logo_url,manifest_url,fallback_manifest_url,license_url,drm_type,numero_canal,activo,fecha_creacion,source,source_channel_id FROM live_channels ORDER BY id`),
-  pool.query(`SELECT * FROM movies ORDER BY id`),pool.query(`SELECT * FROM series ORDER BY id`)
+  pool.query(`SELECT * FROM movies ORDER BY id`),pool.query(`SELECT * FROM series ORDER BY id`),pool.query(`SELECT * FROM series_episodes ORDER BY id`),pool.query(`SELECT * FROM epg_programs ORDER BY id`)
  ]);
  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
  res.set('Content-Disposition',`attachment; filename="tv-digital-backup-${stamp}.json"`);
  res.set('Content-Type','application/json; charset=utf-8');
- res.send(JSON.stringify({version:1,generatedAt:new Date().toISOString(),data:{users:users.rows,subscriptions:subscriptions.rows,payments:payments.rows,plans:plans.rows,categories:categories.rows,live_channels:channels.rows,movies:movies.rows,series:series.rows}},null,2));
+ res.send(JSON.stringify({version:1,generatedAt:new Date().toISOString(),data:{users:users.rows,subscriptions:subscriptions.rows,payments:payments.rows,plans:plans.rows,categories:categories.rows,live_channels:channels.rows,movies:movies.rows,series:series.rows,series_episodes:episodes.rows,epg_programs:epg.rows}},null,2));
 }catch(error){next(error);}};

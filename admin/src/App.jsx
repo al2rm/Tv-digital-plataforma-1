@@ -12,6 +12,7 @@ import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
 import WhatsAppPage from "./pages/WhatsAppPage";
 import ActivityPage from "./pages/ActivityPage";
+import ProgrammingPage from "./pages/ProgrammingPage";
 
 const adminPages = {
   "/": DashboardPage,
@@ -22,13 +23,14 @@ const adminPages = {
   "/pagos": PaymentsPage,
   "/catalogo": ContentPage,
   "/conexion": ConnectionPage,
-  "/actividad": ActivityPage
+  "/actividad": ActivityPage,
+  "/programacion": ProgrammingPage
 };
 const staffRoles=new Set(['admin','vendedor','soporte']);
 const allowedPaths={
   admin:Object.keys(adminPages),
   vendedor:['/','/leads','/whatsapp','/usuarios','/suscripciones','/pagos'],
-  soporte:['/','/usuarios','/catalogo']
+  soporte:['/','/usuarios','/catalogo','/programacion']
 };
 
 function Redirect({ to }) {

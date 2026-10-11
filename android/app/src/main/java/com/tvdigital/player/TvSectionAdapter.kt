@@ -11,7 +11,7 @@ data class ChannelSection(val title: String, val channels: List<Channel>)
 class TvSectionAdapter(
     private val onClick: (Channel) -> Unit,
     private val onFavorite: (Channel) -> Unit,
-    private val onContentFocus: () -> Unit
+    private val onContentFocus: (Channel) -> Unit
 ) : RecyclerView.Adapter<TvSectionAdapter.Holder>() {
     private var sections = emptyList<ChannelSection>()
     private var favorites = emptySet<String>()

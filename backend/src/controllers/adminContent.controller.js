@@ -1,16 +1,18 @@
 import { pool } from '../database/db.js';
 import { env } from '../config/env.js';
 const allowed={
- movies:['category_id','titulo','descripcion','poster_url','banner_url','manifest_url','fallback_manifest_url','license_url','drm_type','anio','duracion_min','clasificacion','destacado','activo'],
- series:['category_id','titulo','descripcion','poster_url','banner_url','anio','clasificacion','destacado','activo'],
- live_channels:['category_id','nombre','logo_url','manifest_url','fallback_manifest_url','license_url','drm_type','numero_canal','activo'],
+ movies:['category_id','titulo','descripcion','poster_url','banner_url','manifest_url','fallback_manifest_url','license_url','drm_type','anio','duracion_min','clasificacion','parental_rating','destacado','activo'],
+ series:['category_id','titulo','descripcion','poster_url','banner_url','anio','clasificacion','parental_rating','destacado','activo'],
+ series_episodes:['series_id','titulo','descripcion','season_number','episode_number','poster_url','manifest_url','fallback_manifest_url','license_url','drm_type','parental_rating','activo'],
+ epg_programs:['channel_id','titulo','descripcion','starts_at','ends_at'],
+ live_channels:['category_id','nombre','logo_url','manifest_url','fallback_manifest_url','license_url','drm_type','numero_canal','parental_rating','activo'],
  categories:['nombre','slug','tipo','activo']
 };
 const fail=message=>Object.assign(new Error(message),{statusCode:400});
 function fieldsFor(kind){if(!allowed[kind])throw fail('Tipo de contenido inválido');return allowed[kind];}
 function validate(kind,body){
  fieldsFor(kind);
- const title=['movies','series'].includes(kind)?'titulo':'nombre';
+ const title=['movies','series','series_episodes','epg_programs'].includes(kind)?'titulo':'nombre';
  if(typeof body[title]!=='string'||!body[title].trim())throw fail('El nombre es obligatorio');
  if(kind==='categories'&&!/^[a-z0-9-]+$/.test(body.slug||''))throw fail('El identificador debe usar letras minúsculas, números o guiones');
  for(const key of ['manifest_url','fallback_manifest_url','license_url','logo_url','poster_url','banner_url']){
@@ -22,6 +24,9 @@ function validate(kind,body){
  if(body.drm_type&&!['none','widevine'].includes(body.drm_type))throw fail('DRM no compatible');
  if(body.drm_type==='widevine'&&!body.license_url)throw fail('Widevine requiere una URL de licencia');
  if(body.category_id!==undefined&&body.category_id!==null&&(!Number.isSafeInteger(Number(body.category_id))||Number(body.category_id)<=0))throw fail('Categoría inválida');
+ for(const key of ['series_id','channel_id','season_number','episode_number'])if(body[key]!==undefined&&(!Number.isSafeInteger(Number(body[key]))||Number(body[key])<=0))throw fail(`${key}: valor inválido`);
+ if(body.parental_rating!==undefined&&(!Number.isSafeInteger(Number(body.parental_rating))||Number(body.parental_rating)<0||Number(body.parental_rating)>21))throw fail('Clasificación parental inválida');
+ if(kind==='epg_programs'&&(!body.starts_at||!body.ends_at||!Number.isFinite(Date.parse(body.starts_at))||!Number.isFinite(Date.parse(body.ends_at))||Date.parse(body.ends_at)<=Date.parse(body.starts_at)))throw fail('El horario del programa es inválido');
  if(body.activo!==undefined&&typeof body.activo!=='boolean')throw fail('Estado inválido');
 }
 export const listContent=async(req,res,next)=>{try{fieldsFor(req.params.kind);const r=await pool.query(`SELECT * FROM ${req.params.kind} ORDER BY fecha_creacion DESC NULLS LAST,id DESC`);res.json({ok:true,data:r.rows});}catch(e){next(e);}};

@@ -15,5 +15,6 @@ class CatalogApiClient(baseUrl: String, token: String) {
         } while (more)
         return results
     }
+    fun loadEpisodes(seriesId: String): List<Channel> = CatalogParser.parseChannels(api.request("api/catalog/series/${encode(seriesId)}/episodes").toString()).first
     private fun encode(s: String) = URLEncoder.encode(s, "UTF-8")
 }

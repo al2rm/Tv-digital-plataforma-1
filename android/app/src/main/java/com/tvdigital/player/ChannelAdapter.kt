@@ -8,7 +8,7 @@ import com.tvdigital.player.databinding.ItemChannelBinding
 class ChannelAdapter(
     private val onClick: (Channel) -> Unit,
     private val onFavorite: (Channel) -> Unit,
-    private val onContentFocus: () -> Unit = {}
+    private val onContentFocus: (Channel) -> Unit = {}
 ) : RecyclerView.Adapter<ChannelAdapter.ChannelViewHolder>() {
     private val items = mutableListOf<Channel>()
 
@@ -35,7 +35,7 @@ class ChannelAdapter(
             binding.root.contentDescription = "${channel.name}. Mantén pulsado OK para marcar como favorito"
             binding.root.setOnClickListener { onClick(channel) }
             binding.root.setOnLongClickListener { onFavorite(channel); true }
-            binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) onContentFocus() }
+            binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) onContentFocus(channel) }
         }
     }
 }

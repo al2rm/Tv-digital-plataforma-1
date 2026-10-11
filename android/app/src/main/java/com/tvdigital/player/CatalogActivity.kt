@@ -1,9 +1,12 @@
 package com.tvdigital.player
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.tvdigital.player.databinding.ActivityCatalogBinding
@@ -13,8 +16,10 @@ class CatalogActivity : Activity() {
     private lateinit var binding: ActivityCatalogBinding
     private val executor=Executors.newSingleThreadExecutor()
     private val api by lazy { CatalogApiClient(SessionStore.baseUrl,SessionStore.token) }
-    private val sectionAdapter=TvSectionAdapter(::openChannel,::toggleFavorite,::collapseMenu)
+    private val sectionAdapter=TvSectionAdapter(::openChannel,::toggleFavorite,::focusChannel)
     private var channels=emptyList<Channel>()
+    private var seriesEpisodes=emptyList<Channel>()
+    private var selectedSeriesName=""
     private var canPlay=false
     private var generation=0
     private var firstResume=true
@@ -63,15 +68,16 @@ class CatalogActivity : Activity() {
         val ids=favorites()
         val visible=when(target){
             Mode.FAVORITES->channels.filter{it.groupId in ids}
-            Mode.MOVIES->channels.filter{it.groupId.startsWith("movie:")}
-            Mode.SERIES->emptyList()
-            else->channels.filter{it.groupId.startsWith("channel:")}
+            Mode.MOVIES->channels.filter{it.kind=="movie"}
+            Mode.SERIES->channels.filter{it.kind=="series"}
+            Mode.EPISODES->seriesEpisodes
+            else->channels.filter{it.kind=="channel"}
         }
-        val title=when(target){Mode.HOME->"Inicio";Mode.FAVORITES->"Favoritos";Mode.MOVIES->"Películas";Mode.SERIES->"Series";else->""}
-        val sections=if(target==Mode.HOME) visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)} else listOf(ChannelSection(title,visible)).filter{it.channels.isNotEmpty()}
+        val title=when(target){Mode.HOME->"Inicio";Mode.FAVORITES->"Favoritos";Mode.MOVIES->"Películas";Mode.SERIES->"Series";Mode.EPISODES->selectedSeriesName;else->""}
+        val sections=if(target in listOf(Mode.HOME,Mode.EPISODES)) visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)} else listOf(ChannelSection(title,visible)).filter{it.channels.isNotEmpty()}
         binding.screenTitle.text=title
         binding.catalogStatus.text="${visible.size} ${if(visible.size==1)"contenido" else "contenidos"}"
-        binding.emptyState.text=if(target==Mode.SERIES)"Las series aparecerán aquí cuando se agreguen al panel" else "No hay contenido en esta sección"
+        binding.emptyState.text="No hay contenido en esta sección"
         binding.emptyState.visibility=if(visible.isEmpty())View.VISIBLE else View.GONE
         binding.loading.visibility=View.GONE
         sectionAdapter.submitList(sections,ids)
@@ -81,11 +87,25 @@ class CatalogActivity : Activity() {
     private fun collapseMenu(){setMenuWidth(72);binding.homeButton.text="⌂";binding.favoritesButton.text="★";binding.moviesButton.text="▶";binding.seriesButton.text="▦";binding.settingsButton.text="⚙";binding.aboutButton.text="ⓘ"}
     private fun setMenuWidth(dp:Int){binding.sideMenu.layoutParams=binding.sideMenu.layoutParams.apply{width=(dp*resources.displayMetrics.density).toInt()}}
     private fun toggleFavorite(channel:Channel){val ids=favorites().toMutableSet();val added=ids.add(channel.groupId);if(!added)ids.remove(channel.groupId);preferences.edit().putStringSet(favoriteKey,ids).apply();Toast.makeText(this,if(added)"Agregado a favoritos" else "Quitado de favoritos",Toast.LENGTH_SHORT).show();show(mode)}
-    private fun openChannel(channel:Channel){if(!canPlay){Toast.makeText(this,"Contacta al administrador para activar tu suscripción",Toast.LENGTH_LONG).show();return};startActivity(Intent(this,PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_CONTENT_ID,channel.groupId))}
+    private fun focusChannel(channel:Channel){collapseMenu();binding.catalogStatus.text=listOfNotNull(channel.name,channel.epgNow.takeIf{it.isNotBlank()}?.let{"Ahora: $it"},channel.epgNext.takeIf{it.isNotBlank()}?.let{"Después: $it"},if(channel.restricted)"🔒 PIN parental" else null).joinToString("  ·  ")}
+    private fun openChannel(channel:Channel){
+        if(channel.kind=="series"){openSeries(channel);return}
+        if(!canPlay){Toast.makeText(this,"Contacta al administrador para activar tu suscripción",Toast.LENGTH_LONG).show();return}
+        if(channel.restricted)requestParentalPin(channel) else launchPlayer(channel,"")
+    }
+    private fun openSeries(series:Channel){
+        val id=series.groupId.substringAfter(':');val current=++generation;binding.loading.visibility=View.VISIBLE
+        executor.execute{val result=runCatching{api.loadEpisodes(id)};runOnUiThread{if(isDestroyed||current!=generation)return@runOnUiThread;result.onSuccess{seriesEpisodes=it;selectedSeriesName=series.name;show(Mode.EPISODES)}.onFailure(::showError)}}
+    }
+    private fun requestParentalPin(channel:Channel){
+        val input=EditText(this).apply{hint="PIN de 4 números";inputType=InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD;maxLines=1}
+        AlertDialog.Builder(this).setTitle("Contenido protegido").setMessage("Escribe el PIN parental para continuar.").setView(input).setNegativeButton("Cancelar",null).setPositiveButton("Abrir"){_,_->val pin=input.text.toString();if(pin.length==4)launchPlayer(channel,pin) else Toast.makeText(this,"El PIN debe tener 4 números",Toast.LENGTH_SHORT).show()}.show()
+    }
+    private fun launchPlayer(channel:Channel,pin:String){startActivity(Intent(this,PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_CONTENT_ID,channel.groupId).putExtra(PlayerActivity.EXTRA_PARENTAL_PIN,pin))}
     private fun showError(error:Throwable){if(error is ApiException&&error.status==401){logout();return};binding.loading.visibility=View.GONE;binding.catalogStatus.text=error.message?:"No se pudo cargar el catálogo"}
     private fun logout(){SessionStore.clear(this);startActivity(Intent(this,LoginActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK));finish()}
     override fun onResume(){super.onResume();if(!::binding.isInitialized)return;if(firstResume)firstResume=false else refreshCatalog()}
     override fun onDestroy(){executor.shutdownNow();super.onDestroy()}
-    private enum class Mode{HOME,FAVORITES,MOVIES,SERIES,SETTINGS,ABOUT}
+    private enum class Mode{HOME,FAVORITES,MOVIES,SERIES,EPISODES,SETTINGS,ABOUT}
     private data class CatalogRefresh(val account:org.json.JSONObject,val items:List<Channel>)
 }

@@ -14,7 +14,8 @@ const emptyForm = {
   telefono: "",
   rol: "cliente",
   estado: "activo",
-  consentimientoWhatsapp: false
+  consentimientoWhatsapp: false,
+  parentalPin: ""
 };
 
 export default function UsersPage() {
@@ -238,6 +239,10 @@ export default function UsersPage() {
                 <option value="inactivo">Inactivo</option>
                 <option value="bloqueado">Bloqueado</option>
               </select>
+            </label>
+            <label>
+              PIN parental
+              <input inputMode="numeric" pattern="[0-9]{4}" maxLength="4" value={form.parentalPin||""} onChange={(event)=>setForm({...form,parentalPin:event.target.value.replace(/\D/g,"").slice(0,4)})} placeholder={form.parental_pin_configured?"Configurado · escribe para cambiar":"4 números"}/>
             </label>
             <label className="checkbox-field form-grid__full">
               <input
