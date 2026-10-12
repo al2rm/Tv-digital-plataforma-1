@@ -6,7 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URI
 
 class ApiException(val status: Int, message: String) : IOException(message)
-class AppApiClient(private val baseUrl: String, private val token: String = "") {
+class AppApiClient(private val baseUrl: String, private val token: String = "", private val defaultHeaders: Map<String,String> = emptyMap()) {
     fun request(path: String, payload: JSONObject? = null, headers: Map<String,String> = emptyMap()): JSONObject {
         val connection = URI(baseUrl).resolve(path).toURL().openConnection() as HttpURLConnection
         try {
@@ -18,6 +18,7 @@ class AppApiClient(private val baseUrl: String, private val token: String = "") 
             connection.setRequestProperty("Cache-Control", "no-cache, no-store")
             connection.setRequestProperty("Pragma", "no-cache")
             if (token.isNotBlank()) connection.setRequestProperty("Authorization", "Bearer $token")
+            defaultHeaders.forEach { (key,value) -> connection.setRequestProperty(key,value) }
             headers.forEach { (key,value) -> connection.setRequestProperty(key,value) }
             if (payload != null) {
                 connection.requestMethod = "POST"

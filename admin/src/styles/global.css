@@ -339,6 +339,66 @@ p {
   grid-template-columns: minmax(250px, 390px);
 }
 
+.stats-grid--operations {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.operation-stat {
+  align-items: center;
+}
+
+.operation-stat > svg {
+  color: var(--blue-2);
+}
+
+.operation-stat span,
+.operation-stat strong,
+.table-subline,
+.device-row small {
+  display: block;
+}
+
+.operation-stat span,
+.table-subline,
+.device-row small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.operation-stat strong {
+  margin-top: 6px;
+  color: #fff;
+  font-size: 25px;
+}
+
+.device-list {
+  display: grid;
+  gap: 10px;
+}
+
+.device-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 13px;
+}
+
+.device-row small { margin-top: 4px; }
+
+.access-result pre {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #07111f;
+  padding: 16px;
+  color: #dcecff;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .stat-card {
   position: relative;
   display: flex;
@@ -1350,6 +1410,9 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 800px) {
+  .stats-grid--operations {
+    grid-template-columns: 1fr;
+  }
   .sidebar {
     transform: translateX(-102%);
     transition: transform 180ms ease;

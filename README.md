@@ -14,6 +14,8 @@ Plataforma propia para administrar clientes, suscripciones, pagos y una aplicaci
 - reproducción HLS/DASH y Widevine mediante fuentes HTTPS autorizadas;
 - diagnóstico de formato/códec, selección manual HLS/TS e historial reciente en Android;
 - bloqueo de reproducción cuando la cuenta está desactivada o la suscripción está vencida;
+- módulo propio de revendedores, créditos y accesos demo con vencimiento por hora;
+- límite de televisores por cliente y liberación remota de dispositivos desde el panel;
 - compilación automática de la APK de prueba con GitHub Actions.
 
 ## Estructura
@@ -31,9 +33,9 @@ Plataforma propia para administrar clientes, suscripciones, pagos y una aplicaci
 4. Descarga la APK del resultado del flujo **Compilar app Android** en GitHub Actions.
 5. En la app, escribe la dirección HTTPS de tu servidor e inicia sesión con un cliente del panel.
 
-## LumixTV
+## Operación propia
 
-La cuenta de revendedor se gestiona actualmente desde el panel de LumixTV. La sincronización automática requiere documentación oficial de su API y un contrato autorizado de reproducción. No guardes credenciales del panel del proveedor dentro de la app ni del repositorio.
+El módulo **Revendedores y demos** reproduce el flujo operativo necesario con código y base de datos propios. No se conecta a APIs privadas, no copia credenciales de terceros y mantiene los accesos bajo control de TV Digital Pro.
 
 ## Verificación
 

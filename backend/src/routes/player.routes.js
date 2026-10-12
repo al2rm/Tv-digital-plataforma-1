@@ -4,6 +4,7 @@ import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { env } from '../config/env.js';
 import { assertPublicChannelUrl } from '../services/iptvOrg.service.js';
 import { verifyPassword } from '../services/auth.service.js';
+import { registerRequestDevice } from '../services/device.service.js';
 import {
  buildXtreamStreamUrl,
  preferredXtreamContainer,
@@ -53,17 +54,28 @@ const catalogSql = `SELECT 'channel:' || c.id AS "groupId", c.nombre AS name,
  COALESCE(c.poster_url,''),COALESCE(c.poster_url,''),'series',(c.parental_rating>=18),'',''
  FROM series c LEFT JOIN categories k ON k.id=c.category_id
  WHERE c.activo AND (k.id IS NULL OR k.activo)`;
-const activeSubscription = async userId => (await pool.query(`SELECT s.id,p.nombre AS plan,
+const activeSubscription = async userId => {
+ const trial=(await pool.query(`SELECT access_expires_at FROM users
+  WHERE id=$1 AND is_demo AND access_expires_at>NOW()`,[userId])).rows[0];
+ if(trial)return {id:null,plan:'Demo',vencimiento:new Date(trial.access_expires_at).toISOString(),isDemo:true};
+ return (await pool.query(`SELECT s.id,p.nombre AS plan,
  TO_CHAR(s.fecha_fin,'YYYY-MM-DD') AS vencimiento FROM subscriptions s JOIN plans p ON p.id=s.plan_id
  WHERE s.user_id=$1 AND s.estado='activa'
  AND s.fecha_inicio <= (NOW() AT TIME ZONE 'America/Asuncion')::date
  AND s.fecha_fin >= (NOW() AT TIME ZONE 'America/Asuncion')::date
  ORDER BY s.fecha_fin DESC LIMIT 1`,[userId])).rows[0] || null;
+};
 router.get('/app/account', async (req,res,next) => {
  try {
-  const result=await pool.query('SELECT id,nombre,email FROM users WHERE id=$1',[req.auth.userId]);
+  await registerRequestDevice(req);
+  const result=await pool.query(`SELECT id,nombre,email,max_devices,
+   (SELECT COUNT(*)::INT FROM user_devices d WHERE d.user_id=users.id) AS active_devices
+   FROM users WHERE id=$1`,[req.auth.userId]);
   const subscription=await activeSubscription(req.auth.userId);
-  res.json({ok:true,data:{user:result.rows[0],subscription,canPlay:req.auth.rol==='admin'||Boolean(subscription),provider:{name:'LumixTV',mode:'manual',connected:false}}});
+  const user=result.rows[0];
+  res.json({ok:true,data:{user,subscription,canPlay:req.auth.rol==='admin'||Boolean(subscription),
+   max_devices:user.max_devices,active_devices:user.active_devices,
+   provider:{name:'TV Digital Pro',mode:'propio',connected:true}}});
  } catch(e){next(e);}
 });
 router.get('/catalog/categories',async(req,res,next)=>{
@@ -98,6 +110,7 @@ router.get('/catalog/series/:seriesId/episodes',async(req,res,next)=>{
 });
 router.get('/playback/session/:contentId',async(req,res,next)=>{
  try {
+  await registerRequestDevice(req);
   if(req.auth.rol!=='admin' && !await activeSubscription(req.auth.userId)) throw fail('Tu suscripción no está activa. Contacta a tu proveedor para renovarla.',403);
   const match=/^(channel|movie|episode):([1-9][0-9]{0,14})$/.exec(req.params.contentId);
   if(!match) throw fail('Contenido inválido');

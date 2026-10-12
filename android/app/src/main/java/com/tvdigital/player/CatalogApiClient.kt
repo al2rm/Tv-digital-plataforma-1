@@ -1,7 +1,8 @@
 package com.tvdigital.player
+import android.content.Context
 import java.net.URLEncoder
-class CatalogApiClient(baseUrl: String, token: String) {
-    private val api = AppApiClient(baseUrl, token)
+class CatalogApiClient(context: Context, baseUrl: String, token: String) {
+    private val api = AppApiClient(baseUrl, token, SessionStore.deviceHeaders(context))
     fun loadCategories() = CatalogParser.parseCategories(api.request("api/catalog/categories").toString())
     fun loadAccount() = api.request("api/app/account").getJSONObject("data")
     fun loadChannels(category: String = "", search: String = ""): List<Channel> {

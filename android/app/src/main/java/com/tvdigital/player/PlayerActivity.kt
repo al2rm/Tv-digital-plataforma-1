@@ -67,7 +67,7 @@ class PlayerActivity : Activity() {
                 if (demo) PlaybackSession.demo()
                 else {
                     check(SessionStore.token.isNotBlank()) { "Tu sesión terminó. Vuelve a iniciar sesión." }
-                    PlaybackSessionClient(SessionStore.baseUrl).load(id, SessionStore.token, intent.getStringExtra(EXTRA_PARENTAL_PIN).orEmpty())
+                    PlaybackSessionClient(this, SessionStore.baseUrl).load(id, SessionStore.token, intent.getStringExtra(EXTRA_PARENTAL_PIN).orEmpty())
                 }
             }
             runOnUiThread {

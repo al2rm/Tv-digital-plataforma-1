@@ -7,7 +7,9 @@ export const listUsers = async (req, res, next) => {
     const result = await pool.query(
       `SELECT id,nombre,email,telefono,rol,estado,fecha_creacion,ultimo_acceso,
               whatsapp_opt_in_at, whatsapp_opt_out_at,
-              (parental_pin_hash IS NOT NULL) AS parental_pin_configured
+              (parental_pin_hash IS NOT NULL) AS parental_pin_configured,
+              is_demo,access_expires_at,max_devices,created_by_user_id,
+              (SELECT COUNT(*)::INT FROM user_devices d WHERE d.user_id=users.id) AS active_devices
        FROM users
        WHERE nombre ILIKE $1 OR email ILIKE $1
        ORDER BY fecha_creacion DESC LIMIT 200`,
@@ -27,12 +29,14 @@ export const createUser = async (req, res, next) => {
       rol = "cliente",
       estado = "activo",
       consentimientoWhatsapp = false,
-      parentalPin = ""
+      parentalPin = "",
+      maxDevices = 1
     } = req.body;
     if (!nombre || !email || !password || password.length < 6) {
       return res.status(400).json({ ok:false, message:"Datos inválidos" });
     }
     if (parentalPin && !/^\d{4}$/.test(String(parentalPin))) return res.status(400).json({ok:false,message:"El PIN parental debe tener 4 números"});
+    if (!Number.isSafeInteger(Number(maxDevices)) || Number(maxDevices) < 1 || Number(maxDevices) > 10) return res.status(400).json({ok:false,message:"El límite de dispositivos debe estar entre 1 y 10"});
     if (!["cliente", "admin", "vendedor", "soporte"].includes(rol) ||
         !["activo", "inactivo", "bloqueado"].includes(estado)) {
       return res.status(400).json({ ok:false, message:"Rol o estado inválido" });
@@ -44,9 +48,9 @@ export const createUser = async (req, res, next) => {
     const parentalPinHash = parentalPin ? await hashPassword(String(parentalPin)) : null;
     const result = await pool.query(
       `INSERT INTO users(
-         nombre,email,password_hash,telefono,rol,estado,whatsapp_opt_in_at,parental_pin_hash
+         nombre,email,password_hash,telefono,rol,estado,whatsapp_opt_in_at,parental_pin_hash,max_devices,created_by_user_id
        )
-       VALUES($1,$2,$3,$4,$5,$6,CASE WHEN $7 THEN NOW() ELSE NULL END,$8)
+       VALUES($1,$2,$3,$4,$5,$6,CASE WHEN $7 THEN NOW() ELSE NULL END,$8,$9,$10)
        RETURNING id,nombre,email,telefono,rol,estado,fecha_creacion,
                  whatsapp_opt_in_at,(parental_pin_hash IS NOT NULL) AS parental_pin_configured`,
       [
@@ -57,7 +61,9 @@ export const createUser = async (req, res, next) => {
         rol,
         estado,
         consentimientoWhatsapp,
-        parentalPinHash
+        parentalPinHash,
+        Number(maxDevices),
+        req.auth.userId
       ]
     );
     res.status(201).json({ ok:true, data:result.rows[0] });
@@ -69,8 +75,9 @@ export const createUser = async (req, res, next) => {
 
 export const updateUser = async (req, res, next) => {
   try {
-    const { nombre, telefono, rol, estado, consentimientoWhatsapp, parentalPin } = req.body;
+    const { nombre, telefono, rol, estado, consentimientoWhatsapp, parentalPin, maxDevices } = req.body;
     if (parentalPin && !/^\d{4}$/.test(String(parentalPin))) return res.status(400).json({ok:false,message:"El PIN parental debe tener 4 números"});
+    if (maxDevices !== undefined && (!Number.isSafeInteger(Number(maxDevices)) || Number(maxDevices) < 1 || Number(maxDevices) > 10)) return res.status(400).json({ok:false,message:"El límite de dispositivos debe estar entre 1 y 10"});
     const parentalPinHash = parentalPin ? await hashPassword(String(parentalPin)) : null;
     if (rol && !["cliente", "admin", "vendedor", "soporte"].includes(rol)) {
       return res.status(400).json({ ok:false, message:"Rol inválido" });
@@ -94,11 +101,12 @@ export const updateUser = async (req, res, next) => {
            WHEN $5::BOOLEAN IS FALSE THEN NOW()
            ELSE whatsapp_opt_out_at
          END,
-         parental_pin_hash = CASE WHEN $6::TEXT IS NOT NULL THEN $6 ELSE parental_pin_hash END
-       WHERE id=$7
+         parental_pin_hash = CASE WHEN $6::TEXT IS NOT NULL THEN $6 ELSE parental_pin_hash END,
+         max_devices=COALESCE($7,max_devices)
+       WHERE id=$8
        RETURNING id,nombre,email,telefono,rol,estado,fecha_creacion,
                  whatsapp_opt_in_at,whatsapp_opt_out_at,(parental_pin_hash IS NOT NULL) AS parental_pin_configured`,
-      [nombre, telefono, rol, estado, consentimientoWhatsapp, parentalPinHash, req.params.id]
+      [nombre, telefono, rol, estado, consentimientoWhatsapp, parentalPinHash, maxDevices, req.params.id]
     );
     if (!result.rowCount) return res.status(404).json({ ok:false, message:"Usuario no encontrado" });
     res.json({ ok:true, data:result.rows[0] });
