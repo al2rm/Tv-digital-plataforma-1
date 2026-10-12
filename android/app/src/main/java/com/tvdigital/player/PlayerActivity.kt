@@ -31,6 +31,7 @@ class PlayerActivity : Activity() {
     private var requestGeneration = 0
     private var position = 0L
     private var resumePlaying = true
+    private var playbackCompleted = false
     private val firstFrameTimeout = Runnable {
         if (!started || renderedFirstFrame) return@Runnable
         val detail = if (player?.videoFormat == null) {
@@ -46,7 +47,7 @@ class PlayerActivity : Activity() {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
         position = savedInstanceState?.getLong("position") ?: 0
-        binding.playButton.setOnClickListener { load() }
+        binding.playButton.setOnClickListener { if(playbackCompleted)restartCompletedContent() else load() }
         binding.externalPlayerButton.setOnClickListener { confirmExternalPlayback() }
         binding.hlsButton.setOnClickListener { selectCandidate("HLS") }
         binding.tsButton.setOnClickListener { selectCandidate("TS") }
@@ -58,6 +59,8 @@ class PlayerActivity : Activity() {
         binding.loading.visibility = View.VISIBLE
         binding.setupPanel.visibility = View.VISIBLE
         binding.playButton.isEnabled = false
+        binding.playButton.text = getString(R.string.play_content)
+        playbackCompleted = false
         binding.externalPlayerButton.visibility = View.GONE
         binding.statusText.text = "Preparando reproducción…"
         val demo = intent.getBooleanExtra("demo", false)
@@ -118,6 +121,8 @@ class PlayerActivity : Activity() {
         val session = candidates.getOrNull(candidateIndex)
             ?: return showError("No encontramos un formato reproducible para este canal.")
         releasePlayer()
+        playbackCompleted = false
+        binding.playButton.text = getString(R.string.play_content)
         renderedFirstFrame = false
         binding.setupPanel.visibility = View.VISIBLE
         binding.loading.visibility = View.VISIBLE
@@ -145,7 +150,9 @@ class PlayerActivity : Activity() {
                             binding.statusText.text = "Señal recibida. Esperando la primera imagen…"
                             updateDiagnostics(session, "Señal lista")
                         }
-                        Player.STATE_ENDED -> tryNextCandidate("La transmisión terminó sin mostrar video.")
+                        Player.STATE_ENDED -> if(session.contentId.startsWith("channel:") || !renderedFirstFrame) {
+                            tryNextCandidate("La transmisión terminó sin mostrar video.")
+                        } else completeOnDemand(session)
                     }
                 }
 
@@ -204,6 +211,26 @@ class PlayerActivity : Activity() {
         preferences.edit().putString(key, HistoryCodec.record(preferences.getString(key, ""), contentId)).apply()
     }
 
+    private fun completeOnDemand(session: PlaybackSession){
+        playbackHandler.removeCallbacks(firstFrameTimeout)
+        recordHistory(session.contentId)
+        playbackCompleted=true
+        position=0
+        binding.loading.visibility=View.GONE
+        binding.setupPanel.visibility=View.VISIBLE
+        binding.statusText.text="Reproducción finalizada."
+        binding.diagnosticText.text="Contenido completado · ${session.formatLabel()}"
+        binding.playButton.text="Reproducir de nuevo"
+        binding.playButton.isEnabled=true
+    }
+
+    private fun restartCompletedContent(){
+        playbackCompleted=false
+        candidateIndex=0
+        position=0
+        startCandidate()
+    }
+
     private fun tryNextCandidate(lastError: String) {
         playbackHandler.removeCallbacks(firstFrameTimeout)
         if (candidateIndex + 1 < candidates.size) {
@@ -216,6 +243,9 @@ class PlayerActivity : Activity() {
     }
 
     private fun showError(message: String) {
+        val key="${SessionStore.baseUrl}|${SessionStore.userId}"
+        val content=intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty()
+        getSharedPreferences("playback_diagnostics",MODE_PRIVATE).edit().putString(key,"${if(content.isBlank())"Contenido" else content}: $message").apply()
         release(); binding.setupPanel.visibility = View.VISIBLE
         binding.loading.visibility = View.GONE
         binding.externalPlayerButton.visibility = if (externalSession == null) View.GONE else View.VISIBLE
