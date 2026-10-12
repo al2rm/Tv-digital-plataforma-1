@@ -26,8 +26,12 @@ data class PlaybackSession(
     fun playbackCandidates(): List<PlaybackSession> {
         val sources = listOf(manifestUrl) + fallbackUrls
         if (drm != null) {
-            return sources.map { url ->
-                copy(manifestUrl = url, fallbackUrls = emptyList(), mimeType = mimeTypeFor(url, mimeType))
+            return sources.mapIndexed { index, url ->
+                copy(
+                    manifestUrl = url,
+                    fallbackUrls = emptyList(),
+                    mimeType = if (index == 0) mimeType else mimeTypeFor(url, mimeType)
+                )
             }.distinctBy { it.manifestUrl }
         }
         return sources.flatMap { url -> copy(manifestUrl = url, fallbackUrls = emptyList()).formatCandidates() }.distinctBy { it.manifestUrl }
