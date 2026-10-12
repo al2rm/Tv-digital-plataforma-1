@@ -25,9 +25,14 @@ npm run admin:create
 - `POST /api/admin/v2/subscriptions/:id/renew`
 - `GET /api/admin/v2/automations/jobs`
 - `POST /api/admin/v2/automations/run`
+- `GET|POST /api/admin/v2/operations/resellers`
+- `POST /api/admin/v2/operations/resellers/:userId/credits`
+- `POST /api/admin/v2/operations/demos`
+- `GET /api/admin/v2/operations/devices` y `DELETE /api/admin/v2/operations/devices/:id`
 
-Las rutas de CRM, administración y bandeja requieren una cuenta con rol
-`admin`.
+Las rutas aplican permisos diferenciados para `admin`, `vendedor` y `soporte`.
+Los accesos demo vencen por hora exacta y cada instalación Android registrada
+cuenta contra el límite configurado del cliente.
 
 ## Trabajador de automatización
 

@@ -10,6 +10,7 @@ import {
   Radio,
   RefreshCw,
   History,
+  KeyRound,
   Users,
   X
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navigation = [
   { to: "/leads", label: "Ventas CRM", icon: Radio, roles:['admin','vendedor'] },
   { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle, roles:['admin','vendedor'] },
   { to: "/usuarios", label: "Clientes", icon: Users, roles:['admin','vendedor','soporte'] },
+  { to: "/operaciones", label: "Revendedores y demos", icon: KeyRound, roles:['admin','vendedor'] },
   { to: "/suscripciones", label: "Suscripciones", icon: RefreshCw, roles:['admin','vendedor'] },
   { to: "/pagos", label: "Pagos", icon: CreditCard, roles:['admin','vendedor'] },
   { to: "/catalogo", label: "Catálogo", icon: Tv, roles:['admin','soporte'] },

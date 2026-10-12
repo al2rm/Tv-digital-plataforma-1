@@ -1,4 +1,4 @@
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Monitor, Unplug } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
 import DeleteConfirmationModal from "../components/DeleteConfirmationModal";
@@ -15,7 +15,8 @@ const emptyForm = {
   rol: "cliente",
   estado: "activo",
   consentimientoWhatsapp: false,
-  parentalPin: ""
+  parentalPin: "",
+  maxDevices: 1
 };
 
 export default function UsersPage() {
@@ -29,6 +30,8 @@ export default function UsersPage() {
   const [notice, setNotice] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [devicesFor, setDevicesFor] = useState(null);
+  const [devices, setDevices] = useState([]);
 
   const load = useCallback(async () => {
     setError("");
@@ -86,6 +89,24 @@ export default function UsersPage() {
     } finally {
       setDeleting(false);
     }
+  };
+
+  const openDevices = async (user) => {
+    setError("");
+    try {
+      const response = await api.get("/admin/v2/operations/devices", { params: { userId: user.id } });
+      setDevices(response.data.data || []);
+      setDevicesFor(user);
+    } catch (loadError) { setError(apiError(loadError, "No se pudieron cargar los dispositivos")); }
+  };
+
+  const releaseDevice = async (device) => {
+    try {
+      await api.delete(`/admin/v2/operations/devices/${device.id}`);
+      setDevices((current) => current.filter((item) => item.id !== device.id));
+      setNotice(`Dispositivo “${device.device_name}” liberado.`);
+      await load();
+    } catch (removeError) { setError(apiError(removeError, "No se pudo liberar el dispositivo")); }
   };
 
   return (
@@ -155,6 +176,11 @@ export default function UsersPage() {
               )
             },
             {
+              key: "active_devices",
+              label: "Dispositivos",
+              render: (user) => <span>{user.active_devices || 0} / {user.max_devices || 1}</span>
+            },
+            {
               key: "whatsapp_opt_in_at",
               label: "Permiso WhatsApp",
               render: (user) => (
@@ -165,10 +191,11 @@ export default function UsersPage() {
             }
           ]}
           actions={(user) => (
-            <div className="button-row"><button className="mini-button" onClick={() => { setForm({...emptyForm,...user,consentimientoWhatsapp:Boolean(user.whatsapp_opt_in_at)}); setError(""); setOpen(true); }}><Pencil size={15}/>Editar</button>
+            <div className="button-row"><button className="mini-button" onClick={() => { setForm({...emptyForm,...user,maxDevices:user.max_devices||1,consentimientoWhatsapp:Boolean(user.whatsapp_opt_in_at)}); setError(""); setOpen(true); }}><Pencil size={15}/>Editar</button>
             <button type="button" className="mini-button" onClick={() => toggleConsent(user)}>
               {user.whatsapp_opt_in_at ? "Quitar permiso" : "Registrar permiso"}
             </button>
+            <button type="button" className="mini-button" onClick={() => void openDevices(user)}><Monitor size={15}/>Dispositivos</button>
             {currentUser?.rol==='admin'&&<button type="button" className="mini-button mini-button--danger" onClick={() => { setError(""); setDeleteTarget(user); }}>
               <Trash2 size={15}/>Eliminar
             </button>}</div>
@@ -244,6 +271,12 @@ export default function UsersPage() {
               PIN parental
               <input inputMode="numeric" pattern="[0-9]{4}" maxLength="4" value={form.parentalPin||""} onChange={(event)=>setForm({...form,parentalPin:event.target.value.replace(/\D/g,"").slice(0,4)})} placeholder={form.parental_pin_configured?"Configurado · escribe para cambiar":"4 números"}/>
             </label>
+            <label>
+              Máximo de dispositivos
+              <select value={form.maxDevices || form.max_devices || 1} onChange={(event)=>setForm({...form,maxDevices:Number(event.target.value)})}>
+                {[1,2,3,4,5].map((amount)=><option key={amount} value={amount}>{amount}</option>)}
+              </select>
+            </label>
             <label className="checkbox-field form-grid__full">
               <input
                 type="checkbox"
@@ -276,6 +309,11 @@ export default function UsersPage() {
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => void remove()}
         />
+      ) : null}
+      {devicesFor ? (
+        <Modal title={`Dispositivos de ${devicesFor.nombre}`} onClose={() => setDevicesFor(null)}>
+          {devices.length ? <div className="device-list">{devices.map((device)=><div className="device-row" key={device.id}><div><strong>{device.device_name}</strong><small>{device.platform} · Último uso {new Date(device.last_seen_at).toLocaleString("es-PY")}</small></div><button type="button" className="mini-button mini-button--danger" onClick={()=>void releaseDevice(device)}><Unplug size={15}/>Liberar</button></div>)}</div> : <p className="muted-copy">Este cliente todavía no registró ningún televisor.</p>}
+        </Modal>
       ) : null}
     </>
   );

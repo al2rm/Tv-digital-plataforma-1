@@ -8,5 +8,6 @@ dist/
 local.properties
 *.jks
 *.keystore
+keystore.properties
 output/
 tmp/

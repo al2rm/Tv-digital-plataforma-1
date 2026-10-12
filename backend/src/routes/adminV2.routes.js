@@ -37,15 +37,31 @@ import {
   listAutomationJobs,
   runAutomations
 } from "../controllers/automation.controller.js";
+import {
+  adjustCredits,
+  createDemo,
+  createReseller,
+  deleteDevice,
+  listCreditMovements,
+  listDevices,
+  listResellers
+} from "../controllers/adminOperations.controller.js";
 
 const router = Router();
 router.use(authMiddleware, staffMiddleware, auditMiddleware);
-const adminOnly=requireRoles("admin"), sales=requireRoles("admin","vendedor"), support=requireRoles("admin","soporte");
+const adminOnly=requireRoles("admin"), sales=requireRoles("admin","vendedor"), support=requireRoles("admin","soporte"), deviceManagers=requireRoles("admin","vendedor","soporte");
 router.get("/activity", adminOnly, listActivity);
 router.get("/recycle-bin", adminOnly, listRecycleBin);
 router.post("/recycle-bin/:id/restore", adminOnly, restoreRecycleItem);
 router.delete("/recycle-bin/:id", adminOnly, purgeRecycleItem);
 router.get("/backup", adminOnly, downloadBackup);
+router.get("/operations/resellers", sales, listResellers);
+router.post("/operations/resellers", adminOnly, createReseller);
+router.post("/operations/resellers/:userId/credits", adminOnly, adjustCredits);
+router.get("/operations/resellers/:userId/credits", adminOnly, listCreditMovements);
+router.post("/operations/demos", sales, createDemo);
+router.get("/operations/devices", listDevices);
+router.delete("/operations/devices/:id", deviceManagers, deleteDevice);
 router.get("/users", listUsers);
 router.post("/users", sales, createUser);
 router.put("/users/:id", sales, updateUser);

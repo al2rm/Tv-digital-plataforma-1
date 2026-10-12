@@ -9,6 +9,8 @@ Aplicación nativa Kotlin para teléfono, tablet y Android TV.
 - catálogo, categorías, búsqueda y favoritos por usuario;
 - estado de suscripción visible;
 - bloqueo de reproducción sin suscripción activa;
+- acceso demo con vencimiento exacto;
+- registro privado de la instalación y límite de televisores por cliente;
 - Media3 para HLS, DASH y Widevine;
 - video demo para comprobar el reproductor.
 

@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
 class CatalogActivity : Activity() {
     private lateinit var binding: ActivityCatalogBinding
     private val executor=Executors.newSingleThreadExecutor()
-    private val api by lazy { CatalogApiClient(SessionStore.baseUrl,SessionStore.token) }
+    private val api by lazy { CatalogApiClient(this,SessionStore.baseUrl,SessionStore.token) }
     private val sectionAdapter=TvSectionAdapter(::openChannel,::toggleFavorite,::focusChannel)
     private var channels=emptyList<Channel>()
     private var seriesEpisodes=emptyList<Channel>()
@@ -50,8 +50,10 @@ class CatalogActivity : Activity() {
                 if(isDestroyed||isFinishing||current!=generation)return@runOnUiThread
                 result.onSuccess{refresh->
                     canPlay=refresh.account.optBoolean("canPlay")
-                    val end=refresh.account.optJSONObject("subscription")?.optString("vencimiento")
-                    binding.accountStatus.text=when{end!=null->"Suscripción activa hasta $end";canPlay->"Vista de administrador";else->"Suscripción pendiente"}
+                    val subscription=refresh.account.optJSONObject("subscription")
+                    val end=subscription?.optString("vencimiento")
+                    val devices="${refresh.account.optInt("active_devices",0)} de ${refresh.account.optInt("max_devices",1)} TV"
+                    binding.accountStatus.text=when{subscription?.optBoolean("isDemo")==true->"Demo activa · $devices";end!=null->"Suscripción activa hasta $end · $devices";canPlay->"Vista de administrador";else->"Suscripción pendiente"}
                     binding.settingsAccount.text="${SessionStore.name}\n${binding.accountStatus.text}"
                     channels=refresh.items;show(mode)
                 }.onFailure(::showError)
