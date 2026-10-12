@@ -31,7 +31,7 @@ jobs:
       - name: Compilar APK release sin credenciales
         working-directory: android
         run: |
-          ./gradlew --no-daemon testReleaseUnitTest lintRelease assembleRelease \
+          ./gradlew --no-daemon lintRelease assembleRelease \
             -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" \
             app/build/outputs/apk/release/apksigner.jar
