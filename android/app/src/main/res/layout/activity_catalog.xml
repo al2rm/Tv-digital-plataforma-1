@@ -21,6 +21,7 @@
         <LinearLayout android:id="@+id/settingsPanel" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:visibility="gone">
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Configuración" android:textColor="#FFFFFF" android:textSize="30sp" android:textStyle="bold" />
             <TextView android:id="@+id/settingsAccount" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:textColor="#CBD5E1" android:textSize="18sp" />
+            <TextView android:id="@+id/settingsDiagnostics" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:textColor="#38BDF8" android:textSize="16sp" android:lineSpacingExtra="4dp" />
             <Button android:id="@+id/refreshButton" android:layout_width="280dp" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Actualizar canales" />
             <Button android:id="@+id/logoutButton" android:layout_width="280dp" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Cerrar sesión" />
         </LinearLayout>
