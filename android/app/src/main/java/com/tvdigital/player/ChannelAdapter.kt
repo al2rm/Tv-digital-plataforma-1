@@ -13,9 +13,11 @@ class ChannelAdapter(
     private val items = mutableListOf<Channel>()
 
     private var favoriteIds = emptySet<String>()
+    private var preferredFocusId: String? = null
 
-    fun submitList(channels: List<Channel>, favorites: Set<String>) {
+    fun submitList(channels: List<Channel>, favorites: Set<String>, focusId: String? = null) {
         favoriteIds = favorites
+        preferredFocusId = focusId
         items.clear()
         items.addAll(channels)
         notifyDataSetChanged()
@@ -36,6 +38,10 @@ class ChannelAdapter(
             binding.root.setOnClickListener { onClick(channel) }
             binding.root.setOnLongClickListener { onFavorite(channel); true }
             binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) onContentFocus(channel) }
+            if (channel.groupId == preferredFocusId) {
+                preferredFocusId = null
+                binding.root.post { binding.root.requestFocus() }
+            }
         }
     }
 }
