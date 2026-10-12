@@ -7,7 +7,8 @@ import com.tvdigital.player.databinding.ItemChannelBinding
 
 class ChannelAdapter(
     private val onClick: (Channel) -> Unit,
-    private val onFavorite: (Channel) -> Unit
+    private val onFavorite: (Channel) -> Unit,
+    private val onContentFocus: (Channel) -> Unit = {}
 ) : RecyclerView.Adapter<ChannelAdapter.ChannelViewHolder>() {
     private val items = mutableListOf<Channel>()
 
@@ -29,13 +30,12 @@ class ChannelAdapter(
 
     inner class ChannelViewHolder(private val binding: ItemChannelBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(channel: Channel) {
-            binding.favoriteButton.text = if (channel.groupId in favoriteIds) "★ Favorito" else "☆ Favorito"
-            binding.favoriteButton.contentDescription = "Favorito: ${channel.name}"
-            binding.favoriteButton.setOnClickListener { onFavorite(channel) }
-            binding.channelName.text = channel.name
-            binding.channelCategory.text = channel.category
+            binding.favoriteIndicator.text = if (channel.groupId in favoriteIds) "★" else ""
             RemoteImageLoader.load(binding.channelLogo, channel.logo)
+            binding.root.contentDescription = "${channel.name}. Mantén pulsado OK para marcar como favorito"
             binding.root.setOnClickListener { onClick(channel) }
+            binding.root.setOnLongClickListener { onFavorite(channel); true }
+            binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) onContentFocus(channel) }
         }
     }
 }

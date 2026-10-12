@@ -7,7 +7,11 @@ data class Channel(
     val name: String,
     val category: String,
     val logo: String,
-    val squareLogo: String
+    val squareLogo: String,
+    val kind: String,
+    val restricted: Boolean,
+    val epgNow: String,
+    val epgNext: String
 )
 
 data class Category(val name: String, val channelCount: Int)
@@ -36,7 +40,11 @@ object CatalogParser {
                     name = item.getString("name"),
                     category = item.getString("category"),
                     logo = item.optString("logo"),
-                    squareLogo = item.optString("squareLogo")
+                    squareLogo = item.optString("squareLogo"),
+                    kind = item.optString("kind"),
+                    restricted = item.optBoolean("restricted"),
+                    epgNow = item.optString("epgNow"),
+                    epgNext = item.optString("epgNext")
                 ))
             }
         }

@@ -7,12 +7,12 @@ import {
   listLeads,
   updateLead
 } from "../controllers/crm.controller.js";
-import { adminMiddleware } from "../middlewares/adminMiddleware.js";
+import { requireRoles } from "../middlewares/adminMiddleware.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 
 const router = Router();
 
-router.use(authMiddleware, adminMiddleware);
+router.use(authMiddleware, requireRoles("admin","vendedor"));
 router.get("/dashboard", crmDashboard);
 router.get("/leads", listLeads);
 router.post("/leads", createLead);

@@ -1,169 +1,111 @@
 package com.tvdigital.player
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.widget.ArrayAdapter
-import android.widget.AdapterView
+import android.widget.EditText
 import android.widget.Toast
-import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.tvdigital.player.databinding.ActivityCatalogBinding
 import java.util.concurrent.Executors
 
 class CatalogActivity : Activity() {
     private lateinit var binding: ActivityCatalogBinding
-    private val executor = Executors.newSingleThreadExecutor()
-    private val api by lazy { CatalogApiClient(SessionStore.baseUrl, SessionStore.token) }
-    private val channelAdapter = ChannelAdapter(::openChannel, ::toggleFavorite)
-    private var categories = emptyList<Category>()
-    private var channels = emptyList<Channel>()
-    private var spinnerInitialized = false
-    private var filterMode = FilterMode.ALL
-    private var canPlay = false
-    private var generation = 0
-    private var firstResume = true
-    private val preferences by lazy { getSharedPreferences("favorites", MODE_PRIVATE) }
-    private val favoriteKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}"
-    private val historyPreferences by lazy { getSharedPreferences("history", MODE_PRIVATE) }
-    private val historyKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}"
-    private fun favorites() = preferences.getStringSet(favoriteKey, emptySet()).orEmpty().toSet()
-    private fun history() = HistoryCodec.decode(historyPreferences.getString(historyKey, ""))
+    private val executor=Executors.newSingleThreadExecutor()
+    private val api by lazy { CatalogApiClient(SessionStore.baseUrl,SessionStore.token) }
+    private val sectionAdapter=TvSectionAdapter(::openChannel,::toggleFavorite,::focusChannel)
+    private var channels=emptyList<Channel>()
+    private var seriesEpisodes=emptyList<Channel>()
+    private var selectedSeriesName=""
+    private var canPlay=false
+    private var generation=0
+    private var firstResume=true
+    private var mode=Mode.HOME
+    private val preferences by lazy { getSharedPreferences("favorites",MODE_PRIVATE) }
+    private val favoriteKey get()="${SessionStore.baseUrl}|${SessionStore.userId}"
+    private fun favorites()=preferences.getStringSet(favoriteKey,emptySet()).orEmpty().toSet()
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
-        if (SessionStore.token.isBlank()) { logout(); return }
-        binding = ActivityCatalogBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        binding.channelList.layoutManager = GridLayoutManager(this, if (resources.configuration.screenWidthDp >= 600) 4 else 2)
-        binding.channelList.adapter = channelAdapter
-        binding.searchButton.setOnClickListener { loadChannels() }
-        binding.refreshButton.setOnClickListener { refreshCatalog() }
-        binding.searchInput.setOnEditorActionListener { _, action, _ ->
-            if (action == EditorInfo.IME_ACTION_SEARCH) { loadChannels(); true } else false
-        }
-        binding.logoutButton.setOnClickListener { logout() }
-        binding.favoritesButton.setOnClickListener {
-            filterMode = if (filterMode == FilterMode.FAVORITES) FilterMode.ALL else FilterMode.FAVORITES
-            updateFilterButtons()
-            showChannels()
-        }
-        binding.historyButton.setOnClickListener {
-            filterMode = if (filterMode == FilterMode.HISTORY) FilterMode.ALL else FilterMode.HISTORY
-            updateFilterButtons()
-            showChannels()
-        }
+        if(SessionStore.token.isBlank()&&!SessionStore.restore(this)){logout();return}
+        binding=ActivityCatalogBinding.inflate(layoutInflater);setContentView(binding.root)
+        binding.channelList.layoutManager=LinearLayoutManager(this)
+        binding.channelList.adapter=sectionAdapter
+        val menu=mapOf(binding.homeButton to Mode.HOME,binding.favoritesButton to Mode.FAVORITES,binding.moviesButton to Mode.MOVIES,binding.seriesButton to Mode.SERIES,binding.settingsButton to Mode.SETTINGS,binding.aboutButton to Mode.ABOUT)
+        menu.forEach{(view,target)->view.setOnClickListener{show(target)};view.setOnFocusChangeListener{_,focused->if(focused)expandMenu()}}
+        binding.refreshButton.setOnClickListener{refreshCatalog()}
+        binding.logoutButton.setOnClickListener{logout()}
+        binding.aboutText.text="TV Digital Pro\nVersión ${BuildConfig.VERSION_NAME}\n\nOK: abrir canal\nMantener OK: agregar o quitar favorito\nAtrás: volver a la pantalla anterior"
         refreshCatalog()
     }
-    private fun refreshCatalog() {
-        val current = ++generation
-        val selected = binding.categorySpinner.selectedItemPosition
-        val previousCategory = categories.getOrNull(selected - 1)?.name.orEmpty()
-        val search = binding.searchInput.text.toString()
-        binding.loading.visibility = View.VISIBLE
-        executor.execute {
-            val result = runCatching {
-                val account = api.loadAccount()
-                val groups = api.loadCategories()
-                val category = previousCategory.takeIf { previous -> groups.any { it.name == previous } }.orEmpty()
-                CatalogRefresh(account, groups, api.loadChannels(category, search), category)
-            }
-            runOnUiThread {
-                if (isDestroyed || isFinishing || current != generation) return@runOnUiThread
-                result.onSuccess { refresh ->
-                    val account = refresh.account
-                    canPlay = account.optBoolean("canPlay")
-                    val end = account.optJSONObject("subscription")?.optString("vencimiento")
-                    binding.accountStatus.text = "${SessionStore.name} · " + when {
-                        end != null -> "Vence: $end"
-                        canPlay -> "Vista de administrador"
-                        else -> "Sin suscripción activa"
-                    }
-                    categories = refresh.groups
-                    channels = refresh.items
-                    spinnerInitialized = false
-                    binding.categorySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Todas las categorías") + refresh.groups.map { it.name })
-                    binding.categorySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                        override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-                        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                            if (spinnerInitialized) loadChannels() else spinnerInitialized = true
-                        }
-                    }
-                    val categoryPosition = refresh.groups.indexOfFirst { it.name == refresh.selectedCategory }
-                    binding.categorySpinner.setSelection(if (categoryPosition >= 0) categoryPosition + 1 else 0, false)
-                    binding.categorySpinner.post { spinnerInitialized = true }
-                    showChannels()
+
+    private fun refreshCatalog(){
+        val current=++generation;binding.loading.visibility=View.VISIBLE
+        executor.execute{
+            val result=runCatching{val account=api.loadAccount(); CatalogRefresh(account,api.loadChannels())}
+            runOnUiThread{
+                if(isDestroyed||isFinishing||current!=generation)return@runOnUiThread
+                result.onSuccess{refresh->
+                    canPlay=refresh.account.optBoolean("canPlay")
+                    val end=refresh.account.optJSONObject("subscription")?.optString("vencimiento")
+                    binding.accountStatus.text=when{end!=null->"Suscripción activa hasta $end";canPlay->"Vista de administrador";else->"Suscripción pendiente"}
+                    binding.settingsAccount.text="${SessionStore.name}\n${binding.accountStatus.text}"
+                    channels=refresh.items;show(mode)
                 }.onFailure(::showError)
             }
         }
     }
-    private fun loadChannels() {
-        val current = ++generation
-        val selected = binding.categorySpinner.selectedItemPosition
-        val category = categories.getOrNull(selected - 1)?.name.orEmpty()
-        val search = binding.searchInput.text.toString()
-        binding.loading.visibility = View.VISIBLE
-        executor.execute {
-            val result = runCatching { api.loadChannels(category, search) }
-            runOnUiThread {
-                if (isDestroyed || isFinishing || current != generation) return@runOnUiThread
-                result.onSuccess { channels = it; showChannels() }.onFailure(::showError)
-            }
+
+    private fun show(target:Mode){
+        mode=target
+        binding.catalogPanel.visibility=if(target in listOf(Mode.SETTINGS,Mode.ABOUT))View.GONE else View.VISIBLE
+        binding.settingsPanel.visibility=if(target==Mode.SETTINGS)View.VISIBLE else View.GONE
+        binding.aboutPanel.visibility=if(target==Mode.ABOUT)View.VISIBLE else View.GONE
+        if(target in listOf(Mode.SETTINGS,Mode.ABOUT)){binding.loading.visibility=View.GONE;return}
+        val ids=favorites()
+        val visible=when(target){
+            Mode.FAVORITES->channels.filter{it.groupId in ids}
+            Mode.MOVIES->channels.filter{it.kind=="movie"}
+            Mode.SERIES->channels.filter{it.kind=="series"}
+            Mode.EPISODES->seriesEpisodes
+            else->channels.filter{it.kind=="channel"}
         }
-    }
-    private fun showChannels() {
-        val ids = favorites()
-        val recent = history()
-        val shown = when (filterMode) {
-            FilterMode.ALL -> channels
-            FilterMode.FAVORITES -> channels.filter { it.groupId in ids }
-            FilterMode.HISTORY -> {
-                val byId = channels.associateBy(Channel::groupId)
-                recent.mapNotNull(byId::get)
-            }
-        }
-        channelAdapter.submitList(shown, ids)
-        binding.loading.visibility = View.GONE
-        binding.emptyState.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
-        binding.catalogStatus.text = "${shown.size} contenidos disponibles"
-    }
-    private fun updateFilterButtons() {
-        binding.favoritesButton.text = if (filterMode == FilterMode.FAVORITES) "Ver todo" else "Favoritos"
-        binding.historyButton.text = if (filterMode == FilterMode.HISTORY) "Ver todo" else "Recientes"
-    }
-    private fun toggleFavorite(channel: Channel) {
-        val ids = favorites().toMutableSet()
-        if (!ids.add(channel.groupId)) ids.remove(channel.groupId)
-        preferences.edit().putStringSet(favoriteKey, ids).apply()
-        showChannels()
-    }
-    private fun openChannel(channel: Channel) {
-        if (!canPlay) { Toast.makeText(this, "Contacta al administrador para activar tu suscripción", Toast.LENGTH_LONG).show(); return }
-        startActivity(Intent(this, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_CONTENT_ID, channel.groupId))
-    }
-    private fun showError(error: Throwable) {
-        if (error is ApiException && error.status == 401) { logout(); return }
-        binding.loading.visibility = View.GONE
-        binding.catalogStatus.text = error.message ?: "No se pudo cargar el catálogo"
-    }
-    private fun logout() {
-        SessionStore.clear()
-        startActivity(Intent(this, LoginActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-        finish()
-    }
-    override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
-    override fun onResume() {
-        super.onResume()
-        if (!::binding.isInitialized) return
-        if (firstResume) firstResume = false else refreshCatalog()
+        val title=when(target){Mode.HOME->"Inicio";Mode.FAVORITES->"Favoritos";Mode.MOVIES->"Películas";Mode.SERIES->"Series";Mode.EPISODES->selectedSeriesName;else->""}
+        val sections=if(target in listOf(Mode.HOME,Mode.EPISODES)) visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)} else listOf(ChannelSection(title,visible)).filter{it.channels.isNotEmpty()}
+        binding.screenTitle.text=title
+        binding.catalogStatus.text="${visible.size} ${if(visible.size==1)"contenido" else "contenidos"}"
+        binding.emptyState.text="No hay contenido en esta sección"
+        binding.emptyState.visibility=if(visible.isEmpty())View.VISIBLE else View.GONE
+        binding.loading.visibility=View.GONE
+        sectionAdapter.submitList(sections,ids)
     }
 
-    private enum class FilterMode { ALL, FAVORITES, HISTORY }
-    private data class CatalogRefresh(
-        val account: org.json.JSONObject,
-        val groups: List<Category>,
-        val items: List<Channel>,
-        val selectedCategory: String
-    )
+    private fun expandMenu(){setMenuWidth(220);binding.homeButton.text="⌂  Inicio";binding.favoritesButton.text="★  Favoritos";binding.moviesButton.text="▶  Películas";binding.seriesButton.text="▦  Series";binding.settingsButton.text="⚙  Configuración";binding.aboutButton.text="ⓘ  Sobre la app"}
+    private fun collapseMenu(){setMenuWidth(72);binding.homeButton.text="⌂";binding.favoritesButton.text="★";binding.moviesButton.text="▶";binding.seriesButton.text="▦";binding.settingsButton.text="⚙";binding.aboutButton.text="ⓘ"}
+    private fun setMenuWidth(dp:Int){binding.sideMenu.layoutParams=binding.sideMenu.layoutParams.apply{width=(dp*resources.displayMetrics.density).toInt()}}
+    private fun toggleFavorite(channel:Channel){val ids=favorites().toMutableSet();val added=ids.add(channel.groupId);if(!added)ids.remove(channel.groupId);preferences.edit().putStringSet(favoriteKey,ids).apply();Toast.makeText(this,if(added)"Agregado a favoritos" else "Quitado de favoritos",Toast.LENGTH_SHORT).show();show(mode)}
+    private fun focusChannel(channel:Channel){collapseMenu();binding.catalogStatus.text=listOfNotNull(channel.name,channel.epgNow.takeIf{it.isNotBlank()}?.let{"Ahora: $it"},channel.epgNext.takeIf{it.isNotBlank()}?.let{"Después: $it"},if(channel.restricted)"🔒 PIN parental" else null).joinToString("  ·  ")}
+    private fun openChannel(channel:Channel){
+        if(channel.kind=="series"){openSeries(channel);return}
+        if(!canPlay){Toast.makeText(this,"Contacta al administrador para activar tu suscripción",Toast.LENGTH_LONG).show();return}
+        if(channel.restricted)requestParentalPin(channel) else launchPlayer(channel,"")
+    }
+    private fun openSeries(series:Channel){
+        val id=series.groupId.substringAfter(':');val current=++generation;binding.loading.visibility=View.VISIBLE
+        executor.execute{val result=runCatching{api.loadEpisodes(id)};runOnUiThread{if(isDestroyed||current!=generation)return@runOnUiThread;result.onSuccess{seriesEpisodes=it;selectedSeriesName=series.name;show(Mode.EPISODES)}.onFailure(::showError)}}
+    }
+    private fun requestParentalPin(channel:Channel){
+        val input=EditText(this).apply{hint="PIN de 4 números";inputType=InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD;maxLines=1}
+        AlertDialog.Builder(this).setTitle("Contenido protegido").setMessage("Escribe el PIN parental para continuar.").setView(input).setNegativeButton("Cancelar",null).setPositiveButton("Abrir"){_,_->val pin=input.text.toString();if(pin.length==4)launchPlayer(channel,pin) else Toast.makeText(this,"El PIN debe tener 4 números",Toast.LENGTH_SHORT).show()}.show()
+    }
+    private fun launchPlayer(channel:Channel,pin:String){startActivity(Intent(this,PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_CONTENT_ID,channel.groupId).putExtra(PlayerActivity.EXTRA_PARENTAL_PIN,pin))}
+    private fun showError(error:Throwable){if(error is ApiException&&error.status==401){logout();return};binding.loading.visibility=View.GONE;binding.catalogStatus.text=error.message?:"No se pudo cargar el catálogo"}
+    private fun logout(){SessionStore.clear(this);startActivity(Intent(this,LoginActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK));finish()}
+    override fun onResume(){super.onResume();if(!::binding.isInitialized)return;if(firstResume)firstResume=false else refreshCatalog()}
+    override fun onDestroy(){executor.shutdownNow();super.onDestroy()}
+    private enum class Mode{HOME,FAVORITES,MOVIES,SERIES,EPISODES,SETTINGS,ABOUT}
+    private data class CatalogRefresh(val account:org.json.JSONObject,val items:List<Channel>)
 }

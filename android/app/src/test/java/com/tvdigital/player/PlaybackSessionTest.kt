@@ -121,4 +121,17 @@ class PlaybackSessionTest {
 
         assertEquals(listOf(session), session.playbackCandidates())
     }
+
+    @Test
+    fun triesConfiguredFallbackAfterPrimaryFormats() {
+        val session = PlaybackSession.fromApiResponse(
+            """{"ok":true,"data":{"contentId":"channel:9","manifestUrl":"https://primary.example/live.m3u8","fallbackUrls":["https://backup.example/live.m3u8"],"streamHeaders":{}}}"""
+        )
+
+        val candidates = session.playbackCandidates()
+
+        assertEquals(4, candidates.size)
+        assertEquals("https://primary.example/live.m3u8", candidates[0].manifestUrl)
+        assertEquals("https://backup.example/live.m3u8", candidates[2].manifestUrl)
+    }
 }

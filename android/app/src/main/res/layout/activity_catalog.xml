@@ -1,99 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#050816"
-    android:orientation="vertical"
-    android:padding="16dp">
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/catalog_title"
-        android:textColor="#FFFFFF"
-        android:textSize="28sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/catalogStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="@string/loading_catalog"
-        android:textColor="#94A3B8"
-        android:textSize="14sp" />
-
-    <TextView android:id="@+id/accountStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#38BDF8" android:layout_marginTop="12dp" />
-
-    <Button
-        android:id="@+id/refreshButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Actualizar canales" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="horizontal">
-
-        <EditText
-            android:id="@+id/searchInput"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="@string/search_hint"
-            android:imeOptions="actionSearch"
-            android:inputType="text"
-            android:singleLine="true"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#64748B" />
-
-        <Button
-            android:id="@+id/searchButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/search_button" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#050816" android:orientation="horizontal">
+    <LinearLayout android:id="@+id/sideMenu" android:layout_width="72dp" android:layout_height="match_parent" android:background="#0B1224" android:orientation="vertical" android:padding="8dp">
+        <TextView android:id="@+id/homeButton" style="@style/TvMenuButton" android:text="⌂" />
+        <TextView android:id="@+id/favoritesButton" style="@style/TvMenuButton" android:text="★" />
+        <TextView android:id="@+id/moviesButton" style="@style/TvMenuButton" android:text="▶" />
+        <TextView android:id="@+id/seriesButton" style="@style/TvMenuButton" android:text="▦" />
+        <Space android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1" />
+        <TextView android:id="@+id/settingsButton" style="@style/TvMenuButton" android:text="⚙" />
+        <TextView android:id="@+id/aboutButton" style="@style/TvMenuButton" android:text="ⓘ" />
     </LinearLayout>
-
-    <Spinner
-        android:id="@+id/categorySpinner"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="8dp"
-        android:backgroundTint="#38BDF8"
-        android:popupBackground="#0F172A" />
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-    <Button android:id="@+id/favoritesButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Favoritos" />
-    <Button android:id="@+id/historyButton" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="Recientes" />
-    <Button android:id="@+id/logoutButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Salir" />
-    </LinearLayout>
-    <ProgressBar
-        android:id="@+id/loading"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="12dp" />
-
-    <TextView
-        android:id="@+id/emptyState"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:gravity="center"
-        android:text="@string/empty_catalog"
-        android:textColor="#CBD5E1"
-        android:visibility="gone" />
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/channelList"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingBottom="16dp" />
+    <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:padding="22dp">
+        <LinearLayout android:id="@+id/catalogPanel" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+            <TextView android:id="@+id/screenTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Inicio" android:textColor="#FFFFFF" android:textSize="30sp" android:textStyle="bold" />
+            <TextView android:id="@+id/catalogStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:textColor="#94A3B8" android:textSize="15sp" />
+            <TextView android:id="@+id/accountStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:textColor="#38BDF8" />
+            <ProgressBar android:id="@+id/loading" android:layout_width="40dp" android:layout_height="40dp" android:layout_gravity="center_horizontal" android:layout_marginTop="12dp" />
+            <TextView android:id="@+id/emptyState" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="40dp" android:gravity="center" android:text="No hay contenido en esta sección" android:textColor="#CBD5E1" android:textSize="18sp" android:visibility="gone" />
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/channelList" android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginTop="14dp" android:layout_weight="1" android:clipToPadding="false" android:paddingBottom="28dp" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/settingsPanel" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Configuración" android:textColor="#FFFFFF" android:textSize="30sp" android:textStyle="bold" />
+            <TextView android:id="@+id/settingsAccount" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:textColor="#CBD5E1" android:textSize="18sp" />
+            <Button android:id="@+id/refreshButton" android:layout_width="280dp" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Actualizar canales" />
+            <Button android:id="@+id/logoutButton" android:layout_width="280dp" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Cerrar sesión" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/aboutPanel" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Sobre la app" android:textColor="#FFFFFF" android:textSize="30sp" android:textStyle="bold" />
+            <TextView android:id="@+id/aboutText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:textColor="#CBD5E1" android:textSize="18sp" android:lineSpacingExtra="6dp" />
+        </LinearLayout>
+    </FrameLayout>
 </LinearLayout>

@@ -67,7 +67,7 @@ class PlayerActivity : Activity() {
                 if (demo) PlaybackSession.demo()
                 else {
                     check(SessionStore.token.isNotBlank()) { "Tu sesión terminó. Vuelve a iniciar sesión." }
-                    PlaybackSessionClient(SessionStore.baseUrl).load(id, SessionStore.token)
+                    PlaybackSessionClient(SessionStore.baseUrl).load(id, SessionStore.token, intent.getStringExtra(EXTRA_PARENTAL_PIN).orEmpty())
                 }
             }
             runOnUiThread {
@@ -248,6 +248,7 @@ class PlayerActivity : Activity() {
     }
     companion object {
         const val EXTRA_CONTENT_ID = "contentId"
+        const val EXTRA_PARENTAL_PIN = "parentalPin"
         private const val FIRST_FRAME_TIMEOUT_MS = 18_000L
     }
 }

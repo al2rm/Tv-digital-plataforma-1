@@ -11,6 +11,8 @@ import PaymentsPage from "./pages/PaymentsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import UsersPage from "./pages/UsersPage";
 import WhatsAppPage from "./pages/WhatsAppPage";
+import ActivityPage from "./pages/ActivityPage";
+import ProgrammingPage from "./pages/ProgrammingPage";
 
 const adminPages = {
   "/": DashboardPage,
@@ -20,7 +22,15 @@ const adminPages = {
   "/suscripciones": SubscriptionsPage,
   "/pagos": PaymentsPage,
   "/catalogo": ContentPage,
-  "/conexion": ConnectionPage
+  "/conexion": ConnectionPage,
+  "/actividad": ActivityPage,
+  "/programacion": ProgrammingPage
+};
+const staffRoles=new Set(['admin','vendedor','soporte']);
+const allowedPaths={
+  admin:Object.keys(adminPages),
+  vendedor:['/','/leads','/whatsapp','/usuarios','/suscripciones','/pagos'],
+  soporte:['/','/usuarios','/catalogo','/programacion']
 };
 
 function Redirect({ to }) {
@@ -52,8 +62,9 @@ function RoutedApplication() {
   const { isAuthenticated, user } = useAuth();
 
   if (!isAuthenticated) return <LoginPage />;
-  if (user?.rol !== "admin") return <AccessDenied />;
+  if (!staffRoles.has(user?.rol)) return <AccessDenied />;
   if (path === "/login") return <Redirect to="/" />;
+  if (!allowedPaths[user.rol]?.includes(path)) return <Redirect to="/" />;
 
   const Page = adminPages[path] || DashboardPage;
   return (

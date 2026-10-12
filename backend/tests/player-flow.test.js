@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {randomBytes,randomInt} from 'node:crypto';
 import { readFile,readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 process.env.NODE_ENV='test';
 process.env.ALLOW_HTTP_STREAMS='true';
-process.env.JWT_SECRET='jwt-test-secret-long-enough';
-process.env.XTREAM_CREDENTIALS_KEY='xtream-test-secret-with-more-than-16-characters';
+process.env.JWT_SECRET=randomBytes(32).toString('hex');
+process.env.XTREAM_CREDENTIALS_KEY=randomBytes(32).toString('hex');
 const {pool}=await import('../src/database/db.js');
 const {hashPassword}=await import('../src/services/auth.service.js');
 const {default:app}=await import('../src/app.js');
@@ -21,11 +22,15 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
  await new Promise(resolve=>server.once('listening',resolve));
  t.after(async()=>{await new Promise(r=>server.close(r));pool.query=originalQuery;pool.connect=originalConnect;await db.close();await pool.end();});
  const url=`http://127.0.0.1:${server.address().port}/api`;
- const request=async(path,{method='GET',token,body}={})=>{
-  const r=await fetch(url+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined});
+ const request=async(path,{method='GET',token,body,headers={}}={})=>{
+  const r=await fetch(url+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{ }),...headers},body:body?JSON.stringify(body):undefined});
   return {status:r.status,...await r.json()};
  };
- const password='Prueba-integracion-2026';
+ const password=`Test-${randomBytes(16).toString('hex')}`;
+ const xtreamUsername=`test-${randomBytes(8).toString('hex')}`;
+ const xtreamPassword=randomBytes(16).toString('hex');
+ const parentalPin=String(randomInt(1000,10000));
+ const wrongParentalPin=parentalPin==='0000'?'0001':'0000';
  await query(`INSERT INTO users(nombre,email,password_hash,rol) VALUES('Admin prueba','admin@example.test',$1,'admin')`,[await hashPassword(password)]);
  const admin=(await request('/auth/login',{method:'POST',body:{email:'admin@example.test',password}})).data.token;
  let client,user,content,category,subscription;
@@ -97,7 +102,7 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   };
   try{
    const connected=await request('/admin/v2/content/import/xtream/providers',{method:'POST',token:admin,body:{
-    name:'Proveedor prueba',baseUrl:'http://8.8.8.8',username:'trial-user',password:'trial-password',
+    name:'Proveedor prueba',baseUrl:'http://8.8.8.8',username:xtreamUsername,password:xtreamPassword,
     preferredOutput:'m3u8',userAgent:'TV Digital Test/1.0',referer:'https://portal.example/player'
    }});
    assert.equal(connected.status,201);const provider=connected.data.provider;
@@ -108,11 +113,11 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
    const playback=await request(`/playback/session/channel:${imported.data.imported[0].id}`,{token:admin});
    assert.equal(playback.status,200);assert.match(playback.data.manifestUrl,/\/api\/xtream\/stream\/\d+\.m3u8\?token=/);
    assert.deepEqual(playback.data.streamHeaders,{'User-Agent':'TV Digital Test/1.0',Referer:'https://portal.example/player'});
-   assert.equal(JSON.stringify(playback.data).includes('trial-user'),false);
-   assert.equal(JSON.stringify(playback.data).includes('trial-password'),false);
+   assert.equal(JSON.stringify(playback.data).includes(xtreamUsername),false);
+   assert.equal(JSON.stringify(playback.data).includes(xtreamPassword),false);
    const redirect=await originalFetch(playback.data.manifestUrl,{redirect:'manual'});
    assert.equal(redirect.status,302);
-   assert.match(redirect.headers.get('location'),/\/live\/trial-user\/trial-password\/42\.m3u8$/);
+   assert.equal(new URL(redirect.headers.get('location')).pathname,`/live/${xtreamUsername}/${xtreamPassword}/42.m3u8`);
   }finally{globalThis.fetch=originalFetch;}
  });
  await t.test('suscripción activa permite reproducir y devuelve estado de cuenta',async()=>{
@@ -121,6 +126,10 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal(result.status,201);subscription=result.data.subscription;
   assert.equal((await request('/app/account',{token:client})).data.canPlay,true);
   const playback=await request(`/playback/session/channel:${content.id}`,{token:client});assert.equal(playback.status,200);assert.equal(playback.data.manifestUrl,'https://example.test/demo.m3u8');
+  const updated=await request(`/admin/v2/content/live_channels/${content.id}`,{method:'PUT',token:admin,body:{nombre:'Canal autorizado de prueba',fallback_manifest_url:'https://backup.example.test/demo.m3u8'}});
+  assert.equal(updated.status,200);
+  const withFallback=await request(`/playback/session/channel:${content.id}`,{token:client});
+  assert.deepEqual(withFallback.data.fallbackUrls,['https://backup.example.test/demo.m3u8']);
  });
  await t.test('HTTPS, DRM y ocultación se validan',async()=>{
   const cleartext=await request('/admin/v2/content/movies',{method:'POST',token:admin,body:{titulo:'HTTP permitido',manifest_url:'http://example.test/video.mp4'}});assert.equal(cleartext.status,201);
@@ -135,6 +144,23 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request(`/playback/session/channel:${content.id}`,{token:client})).status,404);
   await request(`/admin/v2/content/categories/${category.id}`,{method:'PUT',token:admin,body:{nombre:'Pruebas',slug:'pruebas',activo:true}});
  });
+ await t.test('publica EPG, series y protege episodios adultos con PIN',async()=>{
+  const now=Date.now();
+  const program=await request('/admin/v2/content/epg_programs',{method:'POST',token:admin,body:{channel_id:content.id,titulo:'Noticias de prueba',starts_at:new Date(now-60000).toISOString(),ends_at:new Date(now+600000).toISOString()}});
+  assert.equal(program.status,201);
+  const catalog=await request('/catalog/channels',{token:client});
+  assert.equal(catalog.data.items.find(item=>item.groupId===`channel:${content.id}`).epgNow,'Noticias de prueba');
+  const show=(await request('/admin/v2/content/series',{method:'POST',token:admin,body:{titulo:'Serie de prueba',parental_rating:18,activo:true}})).data;
+  const episode=(await request('/admin/v2/content/series_episodes',{method:'POST',token:admin,body:{series_id:show.id,titulo:'Episodio piloto',season_number:1,episode_number:1,manifest_url:'https://example.test/episode.m3u8',parental_rating:18,activo:true}})).data;
+  assert.equal((await request('/catalog/channels',{token:client})).data.items.some(item=>item.groupId===`series:${show.id}`),true);
+  const episodes=await request(`/catalog/series/${show.id}/episodes`,{token:client});
+  assert.equal(episodes.data.items[0].groupId,`episode:${episode.id}`);assert.equal(episodes.data.items[0].restricted,true);
+  await request(`/admin/v2/users/${user.id}`,{method:'PUT',token:admin,body:{parentalPin}});
+  assert.equal((await request(`/playback/session/episode:${episode.id}`,{token:client})).status,403);
+  assert.equal((await request(`/playback/session/episode:${episode.id}`,{token:client,headers:{'X-Parental-Pin':wrongParentalPin}})).status,403);
+  const allowed=await request(`/playback/session/episode:${episode.id}`,{token:client,headers:{'X-Parental-Pin':parentalPin}});
+  assert.equal(allowed.status,200);assert.equal(allowed.data.manifestUrl,'https://example.test/episode.m3u8');
+ });
  await t.test('elimina canales y categorías sin borrar contenido relacionado',async()=>{
   const temporaryCategory=(await request('/admin/v2/content/categories',{method:'POST',token:admin,body:{nombre:'Temporal',slug:'temporal',activo:true}})).data;
   const temporaryChannel=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Canal para eliminar',category_id:temporaryCategory.id,manifest_url:'https://example.test/delete.m3u8',activo:true}})).data;
@@ -147,6 +173,11 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request('/admin/v2/content/live_channels',{token:admin})).data.some(item=>item.id===temporaryChannel.id),false);
   assert.equal((await request(`/playback/session/channel:${temporaryChannel.id}`,{token:client})).status,404);
   assert.equal((await request(`/admin/v2/content/live_channels/${temporaryChannel.id}`,{method:'DELETE',token:admin})).status,404);
+  const recycled=await request('/admin/v2/recycle-bin',{token:admin});
+  const archivedChannel=recycled.data.find(item=>item.entity_type==='live_channels'&&item.entity_id===temporaryChannel.id);
+  assert.ok(archivedChannel);
+  assert.equal((await request(`/admin/v2/recycle-bin/${archivedChannel.id}/restore`,{method:'POST',token:admin})).status,200);
+  assert.equal((await request('/admin/v2/content/live_channels',{token:admin})).data.some(item=>item.id===temporaryChannel.id),true);
  });
  await t.test('elimina varios canales seleccionados en una sola operación',async()=>{
   const first=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Canal masivo uno',manifest_url:'https://example.test/bulk-1.m3u8',activo:true}})).data;
@@ -179,6 +210,17 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   assert.equal((await request('/admin/v2/payments',{method:'POST',token:admin,body:{userId:user.id,monto:0}})).status,400);
   assert.equal((await request('/admin/v2/payments',{method:'POST',token:admin,body:{userId:user.id,monto:30000}})).status,201);
   const price=await request('/admin/v2/plans/1',{method:'PUT',token:admin,body:{precio:30000}});assert.equal(price.status,200);assert.equal(Number(price.data.precio),30000);
+ });
+ await t.test('aplica permisos de vendedor y soporte',async()=>{
+  const seller=(await request('/admin/v2/users',{method:'POST',token:admin,body:{nombre:'Vendedor prueba',email:'vendedor@example.test',password,rol:'vendedor'}})).data;
+  const helper=(await request('/admin/v2/users',{method:'POST',token:admin,body:{nombre:'Soporte prueba',email:'soporte@example.test',password,rol:'soporte'}})).data;
+  const sellerToken=(await request('/auth/login',{method:'POST',body:{email:seller.email,password}})).data.token;
+  const supportToken=(await request('/auth/login',{method:'POST',body:{email:helper.email,password}})).data.token;
+  assert.equal((await request('/admin/v2/subscriptions',{token:sellerToken})).status,200);
+  assert.equal((await request('/admin/v2/content/live_channels',{method:'POST',token:sellerToken,body:{nombre:'No autorizado'}})).status,403);
+  assert.equal((await request('/admin/v2/content/live_channels',{method:'POST',token:supportToken,body:{nombre:'Canal soporte',activo:false}})).status,201);
+  assert.equal((await request('/admin/v2/payments',{method:'POST',token:supportToken,body:{userId:user.id,monto:1000}})).status,403);
+  assert.equal((await request('/admin/v2/activity',{token:sellerToken})).status,403);
  });
  await t.test('bloqueo y cambio de rol se aplican incluso con token previo',async()=>{
   await request(`/admin/v2/users/${user.id}`,{method:'PUT',token:admin,body:{estado:'bloqueado'}});

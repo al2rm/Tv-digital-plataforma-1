@@ -6,7 +6,7 @@ import Modal from '../components/Modal';
 import api, { apiError } from '../services/api';
 import { deleteChannelSelection } from '../services/catalogDeletion';
 const kinds={live_channels:'TV en vivo',movies:'Películas',categories:'Categorías'};
-const blank={nombre:'',titulo:'',category_id:'',manifest_url:'',license_url:'',drm_type:'none',logo_url:'',poster_url:'',slug:'',tipo:'general',activo:true};
+const blank={nombre:'',titulo:'',category_id:'',manifest_url:'',fallback_manifest_url:'',license_url:'',drm_type:'none',logo_url:'',poster_url:'',parental_rating:0,slug:'',tipo:'general',activo:true};
 const blankXtream=providers=>({mode:'connect',providers,name:'Mi proveedor Xtream',baseUrl:'',username:'',password:'',userAgent:'',referer:'',preferredOutput:'auto'});
 export default function ContentPage(){
  const [kind,setKind]=useState('live_channels'),[rows,setRows]=useState([]),[categories,setCategories]=useState([]),[form,setForm]=useState(null),[error,setError]=useState(''),[saving,setSaving]=useState(false),[notice,setNotice]=useState('');
@@ -19,7 +19,7 @@ export default function ContentPage(){
  useEffect(()=>{setRows([]);setCatalogSelected(new Set());setBulkDeleteOpen(false);setError('');void load();},[load]);
  const change=(key,value)=>setForm({...form,[key]:value});
  const save=async e=>{e.preventDefault();setSaving(true);setError('');try{
-  const data=kind==='categories'?{nombre:form.nombre,slug:form.slug,tipo:'general',activo:form.activo}:{category_id:form.category_id?Number(form.category_id):null,manifest_url:form.manifest_url||null,license_url:form.drm_type==='widevine'?form.license_url:null,drm_type:form.drm_type,activo:form.activo,...(kind==='movies'?{titulo:form.titulo,poster_url:form.poster_url||null}:{nombre:form.nombre,logo_url:form.logo_url||null})};
+  const data=kind==='categories'?{nombre:form.nombre,slug:form.slug,tipo:'general',activo:form.activo}:{category_id:form.category_id?Number(form.category_id):null,manifest_url:form.manifest_url||null,fallback_manifest_url:form.fallback_manifest_url||null,license_url:form.drm_type==='widevine'?form.license_url:null,drm_type:form.drm_type,parental_rating:Number(form.parental_rating||0),activo:form.activo,...(kind==='movies'?{titulo:form.titulo,poster_url:form.poster_url||null}:{nombre:form.nombre,logo_url:form.logo_url||null})};
   if(form.id)await api.put(`/admin/v2/content/${kind}/${form.id}`,data);else await api.post(`/admin/v2/content/${kind}`,data);
   setForm(null);setNotice('Catálogo actualizado. Los cambios ya están disponibles para la app.');await load();
  }catch(err){setError(apiError(err));}finally{setSaving(false);}};
@@ -83,7 +83,9 @@ export default function ContentPage(){
  {kind==='categories'?<label className="form-grid__full">Identificador<input required pattern="[a-z0-9-]+" placeholder="deportes" value={form.slug} onChange={e=>change('slug',e.target.value)}/></label>:<>
  <label>Categoría<select value={form.category_id||''} onChange={e=>change('category_id',e.target.value)}><option value="">Sin categoría</option>{categories.map(c=><option value={c.id} key={c.id}>{c.nombre}{c.activo?'':' (oculta)'}</option>)}</select></label>
  <label>Protección<select value={form.drm_type||'none'} onChange={e=>change('drm_type',e.target.value)}><option value="none">Sin DRM</option><option value="widevine">Widevine</option></select></label>
+ <label>Clasificación<select value={form.parental_rating||0} onChange={e=>change('parental_rating',e.target.value)}><option value="0">Familiar</option><option value="13">Mayores de 13</option><option value="18">Adultos · requiere PIN</option></select></label>
  <label className="form-grid__full">URL del video o canal<input type="url" placeholder="http://… o https://…" value={form.manifest_url||''} onChange={e=>change('manifest_url',e.target.value)}/></label>
+ <label className="form-grid__full">URL alternativa si falla la principal<input type="url" placeholder="Opcional · http://… o https://…" value={form.fallback_manifest_url||''} onChange={e=>change('fallback_manifest_url',e.target.value)}/><small>El reproductor probará esta señal automáticamente si la principal no entrega imagen.</small></label>
  {form.drm_type==='widevine'&&<><label className="form-grid__full">URL de licencia para clientes<input required type="url" value={form.license_url||''} onChange={e=>change('license_url',e.target.value)}/></label><small className="form-grid__full">Usa una URL apta para el reproductor. Los secretos maestros deben gestionarse en el servidor del proveedor.</small></>}
  <label className="form-grid__full">Logo o portada (HTTPS)<input type="url" value={(kind==='movies'?form.poster_url:form.logo_url)||''} onChange={e=>change(kind==='movies'?'poster_url':'logo_url',e.target.value)}/></label></>}
  <label className="checkbox-field form-grid__full"><input type="checkbox" checked={form.activo} onChange={e=>change('activo',e.target.checked)}/>Visible en la app</label>
