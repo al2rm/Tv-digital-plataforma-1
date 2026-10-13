@@ -24,8 +24,16 @@ data class PlaybackSession(
     )
 
     fun playbackCandidates(): List<PlaybackSession> {
-        if (drm != null) return listOf(this)
         val sources = listOf(manifestUrl) + fallbackUrls
+        if (drm != null) {
+            return sources.mapIndexed { index, url ->
+                copy(
+                    manifestUrl = url,
+                    fallbackUrls = emptyList(),
+                    mimeType = if (index == 0) mimeType else mimeTypeFor(url, mimeType)
+                )
+            }.distinctBy { it.manifestUrl }
+        }
         return sources.flatMap { url -> copy(manifestUrl = url, fallbackUrls = emptyList()).formatCandidates() }.distinctBy { it.manifestUrl }
     }
 
@@ -65,6 +73,13 @@ data class PlaybackSession(
         private val HLS_SUFFIX = Regex("(?i)\\.m3u8(?=([?#]|$))")
         private const val HLS_MIME_TYPE = "application/x-mpegURL"
         private const val MPEG_TS_MIME_TYPE = "video/mp2t"
+
+        private fun mimeTypeFor(url: String, configured: String?): String? = when {
+            HLS_SUFFIX.containsMatchIn(url) -> HLS_MIME_TYPE
+            MPEG_TS_SUFFIX.containsMatchIn(url) -> MPEG_TS_MIME_TYPE
+            url.substringBefore('?').endsWith(".mpd", ignoreCase = true) -> "application/dash+xml"
+            else -> configured
+        }
 
         fun fromApiResponse(rawJson: String): PlaybackSession {
             val root = JSONObject(rawJson)

@@ -123,6 +123,27 @@ class PlaybackSessionTest {
     }
 
     @Test
+    fun triesConfiguredFallbackWithoutRewritingDrmSources() {
+        val session = PlaybackSession(
+            contentId = "movie:7",
+            manifestUrl = "https://primary.example/movie.mpd",
+            mimeType = "application/dash+xml",
+            streamHeaders = emptyMap(),
+            drm = PlaybackSession.DrmConfig("widevine", "https://license.example/widevine", emptyMap()),
+            fallbackUrls = listOf("https://backup.example/movie.m3u8")
+        )
+
+        val candidates = session.playbackCandidates()
+
+        assertEquals(2, candidates.size)
+        assertEquals("https://primary.example/movie.mpd", candidates[0].manifestUrl)
+        assertEquals("application/dash+xml", candidates[0].mimeType)
+        assertEquals("https://backup.example/movie.m3u8", candidates[1].manifestUrl)
+        assertEquals("application/x-mpegURL", candidates[1].mimeType)
+        assertNotNull(candidates[1].drm)
+    }
+
+    @Test
     fun triesConfiguredFallbackAfterPrimaryFormats() {
         val session = PlaybackSession.fromApiResponse(
             """{"ok":true,"data":{"contentId":"channel:9","manifestUrl":"https://primary.example/live.m3u8","fallbackUrls":["https://backup.example/live.m3u8"],"streamHeaders":{}}}"""

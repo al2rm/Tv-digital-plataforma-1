@@ -24,6 +24,7 @@ class CatalogActivity : Activity() {
     private var generation=0
     private var firstResume=true
     private var mode=Mode.HOME
+    private var lastFocusedId:String?=null
     private val preferences by lazy { getSharedPreferences("favorites",MODE_PRIVATE) }
     private val favoriteKey get()="${SessionStore.baseUrl}|${SessionStore.userId}"
     private fun favorites()=preferences.getStringSet(favoriteKey,emptySet()).orEmpty().toSet()
@@ -64,7 +65,11 @@ class CatalogActivity : Activity() {
         binding.catalogPanel.visibility=if(target in listOf(Mode.SETTINGS,Mode.ABOUT))View.GONE else View.VISIBLE
         binding.settingsPanel.visibility=if(target==Mode.SETTINGS)View.VISIBLE else View.GONE
         binding.aboutPanel.visibility=if(target==Mode.ABOUT)View.VISIBLE else View.GONE
-        if(target in listOf(Mode.SETTINGS,Mode.ABOUT)){binding.loading.visibility=View.GONE;return}
+        if(target in listOf(Mode.SETTINGS,Mode.ABOUT)){
+            binding.loading.visibility=View.GONE
+            if(target==Mode.SETTINGS)binding.settingsDiagnostics.text=lastPlaybackDiagnostic()
+            return
+        }
         val ids=favorites()
         val visible=when(target){
             Mode.FAVORITES->channels.filter{it.groupId in ids}
@@ -74,20 +79,25 @@ class CatalogActivity : Activity() {
             else->channels.filter{it.kind=="channel"}
         }
         val title=when(target){Mode.HOME->"Inicio";Mode.FAVORITES->"Favoritos";Mode.MOVIES->"Películas";Mode.SERIES->"Series";Mode.EPISODES->selectedSeriesName;else->""}
-        val sections=if(target in listOf(Mode.HOME,Mode.EPISODES)) visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)} else listOf(ChannelSection(title,visible)).filter{it.channels.isNotEmpty()}
+        val sections=if(target==Mode.HOME){
+            val recentIds=HistoryCodec.decode(getSharedPreferences("history",MODE_PRIVATE).getString(favoriteKey,""))
+            val recent=recentIds.mapNotNull{id->visible.find{it.groupId==id}}.take(12)
+            listOf(ChannelSection("Vistos recientemente",recent)).filter{it.channels.isNotEmpty()}+
+                visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)}
+        }else if(target==Mode.EPISODES) visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)} else listOf(ChannelSection(title,visible)).filter{it.channels.isNotEmpty()}
         binding.screenTitle.text=title
         binding.catalogStatus.text="${visible.size} ${if(visible.size==1)"contenido" else "contenidos"}"
         binding.emptyState.text="No hay contenido en esta sección"
         binding.emptyState.visibility=if(visible.isEmpty())View.VISIBLE else View.GONE
         binding.loading.visibility=View.GONE
-        sectionAdapter.submitList(sections,ids)
+        sectionAdapter.submitList(sections,ids,lastFocusedId)
     }
 
     private fun expandMenu(){setMenuWidth(220);binding.homeButton.text="⌂  Inicio";binding.favoritesButton.text="★  Favoritos";binding.moviesButton.text="▶  Películas";binding.seriesButton.text="▦  Series";binding.settingsButton.text="⚙  Configuración";binding.aboutButton.text="ⓘ  Sobre la app"}
     private fun collapseMenu(){setMenuWidth(72);binding.homeButton.text="⌂";binding.favoritesButton.text="★";binding.moviesButton.text="▶";binding.seriesButton.text="▦";binding.settingsButton.text="⚙";binding.aboutButton.text="ⓘ"}
     private fun setMenuWidth(dp:Int){binding.sideMenu.layoutParams=binding.sideMenu.layoutParams.apply{width=(dp*resources.displayMetrics.density).toInt()}}
     private fun toggleFavorite(channel:Channel){val ids=favorites().toMutableSet();val added=ids.add(channel.groupId);if(!added)ids.remove(channel.groupId);preferences.edit().putStringSet(favoriteKey,ids).apply();Toast.makeText(this,if(added)"Agregado a favoritos" else "Quitado de favoritos",Toast.LENGTH_SHORT).show();show(mode)}
-    private fun focusChannel(channel:Channel){collapseMenu();binding.catalogStatus.text=listOfNotNull(channel.name,channel.epgNow.takeIf{it.isNotBlank()}?.let{"Ahora: $it"},channel.epgNext.takeIf{it.isNotBlank()}?.let{"Después: $it"},if(channel.restricted)"🔒 PIN parental" else null).joinToString("  ·  ")}
+    private fun focusChannel(channel:Channel){lastFocusedId=channel.groupId;collapseMenu();binding.catalogStatus.text=listOfNotNull(channel.name,channel.epgNow.takeIf{it.isNotBlank()}?.let{"Ahora: $it"},channel.epgNext.takeIf{it.isNotBlank()}?.let{"Después: $it"},if(channel.restricted)"🔒 PIN parental" else null).joinToString("  ·  ")}
     private fun openChannel(channel:Channel){
         if(channel.kind=="series"){openSeries(channel);return}
         if(!canPlay){Toast.makeText(this,"Contacta al administrador para activar tu suscripción",Toast.LENGTH_LONG).show();return}
@@ -103,6 +113,10 @@ class CatalogActivity : Activity() {
     }
     private fun launchPlayer(channel:Channel,pin:String){startActivity(Intent(this,PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_CONTENT_ID,channel.groupId).putExtra(PlayerActivity.EXTRA_PARENTAL_PIN,pin))}
     private fun showError(error:Throwable){if(error is ApiException&&error.status==401){logout();return};binding.loading.visibility=View.GONE;binding.catalogStatus.text=error.message?:"No se pudo cargar el catálogo"}
+    private fun lastPlaybackDiagnostic():String{
+        val value=getSharedPreferences("playback_diagnostics",MODE_PRIVATE).getString(favoriteKey,"").orEmpty()
+        return if(value.isBlank())"Diagnóstico de reproducción\nTodavía no se registraron errores en este dispositivo." else "Último problema de reproducción\n$value"
+    }
     private fun logout(){SessionStore.clear(this);startActivity(Intent(this,LoginActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK));finish()}
     override fun onResume(){super.onResume();if(!::binding.isInitialized)return;if(firstResume)firstResume=false else refreshCatalog()}
     override fun onDestroy(){executor.shutdownNow();super.onDestroy()}
