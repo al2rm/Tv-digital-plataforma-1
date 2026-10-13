@@ -824,6 +824,7 @@ tbody tr:last-child td {
   color: #ff858d;
 }
 
+.status-pill--warning,
 .status-pill--preparado,
 .status-pill--programado,
 .status-pill--enviando {
