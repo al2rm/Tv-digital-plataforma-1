@@ -20,6 +20,7 @@ import {
   renewSubscription
 } from "../controllers/adminPayments.controller.js";
 import { listContent, createContent, updateContent, deleteContent, deleteContentBatch } from "../controllers/adminContent.controller.js";
+import { diagnoseChannels } from "../controllers/adminChannelHealth.controller.js";
 import {
   importCountryPlaylist,
   importParaguayPlaylist,
@@ -74,6 +75,7 @@ router.get("/content/import/xtream/providers", support, listXtreamProviders);
 router.post("/content/import/xtream/providers", support, createXtreamProvider);
 router.get("/content/import/xtream/providers/:providerId/streams", support, previewXtreamStreams);
 router.post("/content/import/xtream/providers/:providerId/import", support, importXtreamStreams);
+router.post("/content/live_channels/diagnose", support, diagnoseChannels);
 router.get("/content/:kind", listContent);
 router.post("/content/:kind", support, createContent);
 router.delete("/content/:kind", support, deleteContentBatch);

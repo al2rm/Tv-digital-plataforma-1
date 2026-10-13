@@ -38,7 +38,7 @@ export const downloadBackup=async(req,res,next)=>{try{
   pool.query(`SELECT id,nombre,email,telefono,rol,estado,fecha_creacion,fecha_actualizacion,ultimo_acceso,whatsapp_opt_in_at,whatsapp_opt_out_at FROM users ORDER BY id`),
   pool.query(`SELECT * FROM subscriptions ORDER BY id`),pool.query(`SELECT * FROM payments ORDER BY id`),
   pool.query(`SELECT * FROM plans ORDER BY id`),pool.query(`SELECT * FROM categories ORDER BY id`),
-  pool.query(`SELECT id,category_id,nombre,logo_url,manifest_url,fallback_manifest_url,license_url,drm_type,numero_canal,activo,fecha_creacion,source,source_channel_id FROM live_channels ORDER BY id`),
+  pool.query(`SELECT id,category_id,nombre,logo_url,manifest_url,fallback_manifest_url,license_url,drm_type,numero_canal,activo,fecha_creacion,source,source_channel_id,health_status,health_source,health_error,health_checked_at,consecutive_failures FROM live_channels ORDER BY id`),
   pool.query(`SELECT * FROM movies ORDER BY id`),pool.query(`SELECT * FROM series ORDER BY id`),pool.query(`SELECT * FROM series_episodes ORDER BY id`),pool.query(`SELECT * FROM epg_programs ORDER BY id`)
  ]);
  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
