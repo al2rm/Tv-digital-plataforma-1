@@ -1,6 +1,5 @@
 package com.tvdigital.player
 
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
@@ -9,10 +8,12 @@ import android.view.View
 import android.widget.EditText
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import com.tvdigital.player.databinding.ActivityCatalogBinding
 import java.util.concurrent.Executors
 
-class CatalogActivity : Activity() {
+class CatalogActivity : ComponentActivity() {
     private lateinit var binding: ActivityCatalogBinding
     private val executor=Executors.newSingleThreadExecutor()
     private val api by lazy { CatalogApiClient(SessionStore.baseUrl,SessionStore.token) }
@@ -25,6 +26,7 @@ class CatalogActivity : Activity() {
     private var firstResume=true
     private var mode=Mode.HOME
     private var lastFocusedId:String?=null
+    private var searchQuery=""
     private val preferences by lazy { getSharedPreferences("favorites",MODE_PRIVATE) }
     private val favoriteKey get()="${SessionStore.baseUrl}|${SessionStore.userId}"
     private fun favorites()=preferences.getStringSet(favoriteKey,emptySet()).orEmpty().toSet()
@@ -35,9 +37,13 @@ class CatalogActivity : Activity() {
         binding=ActivityCatalogBinding.inflate(layoutInflater);setContentView(binding.root)
         binding.channelList.layoutManager=LinearLayoutManager(this)
         binding.channelList.adapter=sectionAdapter
+        onBackPressedDispatcher.addCallback(this,object:OnBackPressedCallback(true){
+            override fun handleOnBackPressed(){navigateBack()}
+        })
         val menu=mapOf(binding.homeButton to Mode.HOME,binding.favoritesButton to Mode.FAVORITES,binding.moviesButton to Mode.MOVIES,binding.seriesButton to Mode.SERIES,binding.settingsButton to Mode.SETTINGS,binding.aboutButton to Mode.ABOUT)
         menu.forEach{(view,target)->view.setOnClickListener{show(target)};view.setOnFocusChangeListener{_,focused->if(focused)expandMenu()}}
         binding.refreshButton.setOnClickListener{refreshCatalog()}
+        binding.searchButton.setOnClickListener{requestSearch()}
         binding.logoutButton.setOnClickListener{logout()}
         binding.aboutText.text="TV Digital Pro\nVersión ${BuildConfig.VERSION_NAME}\n\nOK: abrir canal\nMantener OK: agregar o quitar favorito\nAtrás: volver a la pantalla anterior"
         refreshCatalog()
@@ -61,6 +67,7 @@ class CatalogActivity : Activity() {
     }
 
     private fun show(target:Mode){
+        if(target!=mode)searchQuery=""
         mode=target
         binding.catalogPanel.visibility=if(target in listOf(Mode.SETTINGS,Mode.ABOUT))View.GONE else View.VISIBLE
         binding.settingsPanel.visibility=if(target==Mode.SETTINGS)View.VISIBLE else View.GONE
@@ -71,26 +78,31 @@ class CatalogActivity : Activity() {
             return
         }
         val ids=favorites()
-        val visible=when(target){
+        val visible=CatalogSearch.filter(when(target){
             Mode.FAVORITES->channels.filter{it.groupId in ids}
             Mode.MOVIES->channels.filter{it.kind=="movie"}
             Mode.SERIES->channels.filter{it.kind=="series"}
             Mode.EPISODES->seriesEpisodes
             else->channels.filter{it.kind=="channel"}
-        }
+        },searchQuery)
         val title=when(target){Mode.HOME->"Inicio";Mode.FAVORITES->"Favoritos";Mode.MOVIES->"Películas";Mode.SERIES->"Series";Mode.EPISODES->selectedSeriesName;else->""}
         val sections=if(target==Mode.HOME){
             val recentIds=HistoryCodec.decode(getSharedPreferences("history",MODE_PRIVATE).getString(favoriteKey,""))
             val recent=recentIds.mapNotNull{id->visible.find{it.groupId==id}}.take(12)
             listOf(ChannelSection("Vistos recientemente",recent)).filter{it.channels.isNotEmpty()}+
                 visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)}
+        }else if(target==Mode.MOVIES){
+            val progress=getSharedPreferences("playback_progress",MODE_PRIVATE)
+            val continuing=visible.filter{progress.getLong("$favoriteKey|${it.groupId}",0)>0}
+            listOf(ChannelSection("Continuar viendo",continuing),ChannelSection(title,visible)).filter{it.channels.isNotEmpty()}
         }else if(target==Mode.EPISODES) visible.groupBy{it.category}.map{ChannelSection(it.key,it.value)} else listOf(ChannelSection(title,visible)).filter{it.channels.isNotEmpty()}
         binding.screenTitle.text=title
         binding.catalogStatus.text="${visible.size} ${if(visible.size==1)"contenido" else "contenidos"}"
-        binding.emptyState.text="No hay contenido en esta sección"
+        binding.searchButton.text=if(searchQuery.isBlank())"Buscar" else "Buscar: $searchQuery"
+        binding.emptyState.text=if(searchQuery.isBlank())"No hay contenido en esta sección" else "No hay resultados. Cambia o borra la búsqueda."
         binding.emptyState.visibility=if(visible.isEmpty())View.VISIBLE else View.GONE
         binding.loading.visibility=View.GONE
-        sectionAdapter.submitList(sections,ids,lastFocusedId)
+        sectionAdapter.submitList(sections,ids,if(binding.sideMenu.hasFocus())null else lastFocusedId)
     }
 
     private fun expandMenu(){setMenuWidth(220);binding.homeButton.text="⌂  Inicio";binding.favoritesButton.text="★  Favoritos";binding.moviesButton.text="▶  Películas";binding.seriesButton.text="▦  Series";binding.settingsButton.text="⚙  Configuración";binding.aboutButton.text="ⓘ  Sobre la app"}
@@ -110,6 +122,22 @@ class CatalogActivity : Activity() {
     private fun requestParentalPin(channel:Channel){
         val input=EditText(this).apply{hint="PIN de 4 números";inputType=InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD;maxLines=1}
         AlertDialog.Builder(this).setTitle("Contenido protegido").setMessage("Escribe el PIN parental para continuar.").setView(input).setNegativeButton("Cancelar",null).setPositiveButton("Abrir"){_,_->val pin=input.text.toString();if(pin.length==4)launchPlayer(channel,pin) else Toast.makeText(this,"El PIN debe tener 4 números",Toast.LENGTH_SHORT).show()}.show()
+    }
+    private fun requestSearch(){
+        val input=EditText(this).apply{hint="Nombre o categoría";setText(searchQuery);maxLines=1;inputType=InputType.TYPE_CLASS_TEXT}
+        AlertDialog.Builder(this).setTitle("Buscar en esta sección").setView(input)
+            .setNegativeButton("Cancelar",null)
+            .setNeutralButton("Borrar búsqueda"){_,_->searchQuery="";show(mode)}
+            .setPositiveButton("Buscar"){_,_->searchQuery=input.text.toString().trim();show(mode)}.show()
+    }
+    private fun navigateBack(){
+        when{
+            searchQuery.isNotBlank()->{searchQuery="";show(mode)}
+            mode==Mode.EPISODES->show(Mode.SERIES)
+            mode!=Mode.HOME->show(Mode.HOME)
+            else->AlertDialog.Builder(this).setTitle("¿Salir de TV Digital Pro?")
+                .setNegativeButton("Continuar viendo",null).setPositiveButton("Salir"){_,_->finish()}.show()
+        }
     }
     private fun launchPlayer(channel:Channel,pin:String){startActivity(Intent(this,PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_CONTENT_ID,channel.groupId).putExtra(PlayerActivity.EXTRA_PARENTAL_PIN,pin))}
     private fun showError(error:Throwable){if(error is ApiException&&error.status==401){logout();return};binding.loading.visibility=View.GONE;binding.catalogStatus.text=error.message?:"No se pudo cargar el catálogo"}

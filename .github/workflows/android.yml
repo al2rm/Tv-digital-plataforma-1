@@ -30,9 +30,10 @@ jobs:
           -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/
       - name: Compilar APK release sin credenciales
         working-directory: android
-        run: >-
-          ./gradlew --no-daemon lintRelease assembleRelease
-          -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/
+        run: |
+          ./gradlew --no-daemon lintRelease assembleRelease \
+            -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" app/build/outputs/apk/release/apksigner.jar
       - uses: actions/upload-artifact@v4
         with:
           name: TV-Digital-Pro-Android-debug
@@ -41,6 +42,18 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: TV-Digital-Pro-Android-release-unsigned
+          path: android/app/build/outputs/apk/release/
+          retention-days: 7
+      - name: Compilar variante para proveedores HTTP autorizados
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon lintRelease assembleRelease \
+            -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/ \
+            -PALLOW_HTTP_STREAMS=true
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" app/build/outputs/apk/release/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TV-Digital-Pro-Android-release-http-unsigned
           path: android/app/build/outputs/apk/release/
           retention-days: 7
       - uses: actions/upload-artifact@v4

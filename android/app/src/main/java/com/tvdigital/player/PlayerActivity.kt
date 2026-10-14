@@ -32,6 +32,14 @@ class PlayerActivity : Activity() {
     private var position = 0L
     private var resumePlaying = true
     private var playbackCompleted = false
+    private val progressSaver = object : Runnable {
+        override fun run() {
+            if (!started) return
+            saveProgress()
+            playbackHandler.postDelayed(this, 10_000L)
+        }
+    }
+    private val progressKey get() = "${SessionStore.baseUrl}|${SessionStore.userId}|${intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty()}"
     private val firstFrameTimeout = Runnable {
         if (!started || renderedFirstFrame) return@Runnable
         val detail = if (player?.videoFormat == null) {
@@ -46,13 +54,15 @@ class PlayerActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        position = savedInstanceState?.getLong("position") ?: 0
+        val contentId=intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty()
+        position = savedInstanceState?.getLong("position") ?: if(ResumePolicy.supports(contentId))
+            getSharedPreferences("playback_progress",MODE_PRIVATE).getLong(progressKey,0) else 0
         binding.playButton.setOnClickListener { if(playbackCompleted)restartCompletedContent() else load() }
         binding.externalPlayerButton.setOnClickListener { confirmExternalPlayback() }
         binding.hlsButton.setOnClickListener { selectCandidate("HLS") }
         binding.tsButton.setOnClickListener { selectCandidate("TS") }
     }
-    override fun onStart() { super.onStart(); started = true; load() }
+    override fun onStart() { super.onStart(); started = true; load();playbackHandler.postDelayed(progressSaver,10_000L) }
     private fun load() {
         val current = ++requestGeneration
         externalSession = null
@@ -147,7 +157,8 @@ class PlayerActivity : Activity() {
                             updateDiagnostics(session, "Buffering")
                         }
                         Player.STATE_READY -> {
-                            binding.statusText.text = "Señal recibida. Esperando la primera imagen…"
+                            if(renderedFirstFrame)binding.loading.visibility=View.GONE
+                            binding.statusText.text = if(renderedFirstFrame)"Reproduciendo" else "Señal recibida. Esperando la primera imagen…"
                             updateDiagnostics(session, "Señal lista")
                         }
                         Player.STATE_ENDED -> if(session.contentId.startsWith("channel:") || !renderedFirstFrame) {
@@ -216,6 +227,7 @@ class PlayerActivity : Activity() {
         recordHistory(session.contentId)
         playbackCompleted=true
         position=0
+        getSharedPreferences("playback_progress",MODE_PRIVATE).edit().remove(progressKey).apply()
         binding.loading.visibility=View.GONE
         binding.setupPanel.visibility=View.VISIBLE
         binding.statusText.text="Reproducción finalizada."
@@ -234,8 +246,11 @@ class PlayerActivity : Activity() {
     private fun tryNextCandidate(lastError: String) {
         playbackHandler.removeCallbacks(firstFrameTimeout)
         if (candidateIndex + 1 < candidates.size) {
+            player?.let { current ->
+                if(renderedFirstFrame && ResumePolicy.supports(intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty())) position=current.currentPosition
+            }
             candidateIndex++
-            position = 0
+            if(!ResumePolicy.supports(intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty()))position = 0
             startCandidate()
         } else {
             showError("$lastError Prueba otro canal o consulta al proveedor.")
@@ -243,6 +258,7 @@ class PlayerActivity : Activity() {
     }
 
     private fun showError(message: String) {
+        saveProgress()
         val key="${SessionStore.baseUrl}|${SessionStore.userId}"
         val content=intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty()
         getSharedPreferences("playback_diagnostics",MODE_PRIVATE).edit().putString(key,"${if(content.isBlank())"Contenido" else content}: $message").apply()
@@ -266,9 +282,21 @@ class PlayerActivity : Activity() {
     }
     override fun onSaveInstanceState(out: Bundle) { out.putLong("position", player?.currentPosition ?: position); super.onSaveInstanceState(out) }
     override fun onStop() {
+        saveProgress()
+        playbackHandler.removeCallbacks(progressSaver)
         started = false; requestGeneration++
-        player?.let { position = if (it.isCurrentMediaItemLive) 0 else it.currentPosition; resumePlaying = it.playWhenReady }
+        player?.let { position = if (it.isCurrentMediaItemLive || playbackCompleted) 0 else it.currentPosition; resumePlaying = it.playWhenReady }
         release(); super.onStop()
+    }
+    private fun saveProgress(){
+        val current=player ?: return
+        if(!renderedFirstFrame)return
+        val id=intent.getStringExtra(EXTRA_CONTENT_ID).orEmpty()
+        if(!ResumePolicy.supports(id))return
+        val saved=ResumePolicy.position(id,current.currentPosition,current.duration,playbackCompleted)
+        val editor=getSharedPreferences("playback_progress",MODE_PRIVATE).edit()
+        if(saved>0)editor.putLong(progressKey,saved) else editor.remove(progressKey)
+        editor.apply()
     }
     override fun onDestroy() {
         playbackHandler.removeCallbacksAndMessages(null)

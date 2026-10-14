@@ -25,6 +25,15 @@ class TvSectionAdapter(
     override fun onBindViewHolder(holder: Holder, position: Int)=holder.bind(sections[position])
     override fun getItemCount()=sections.size
     inner class Holder(private val binding: ItemChannelSectionBinding):RecyclerView.ViewHolder(binding.root){
-        fun bind(section:ChannelSection){binding.sectionTitle.text=section.title; val adapter=ChannelAdapter(onClick,onFavorite,onContentFocus); binding.sectionChannels.adapter=adapter; adapter.submitList(section.channels,favorites,preferredFocusId)}
+        fun bind(section:ChannelSection){
+            binding.sectionTitle.text=section.title
+            val focusId=preferredFocusId?.takeIf{id->section.channels.any{it.groupId==id}}
+            if(focusId!=null)preferredFocusId=null
+            val adapter=ChannelAdapter(onClick,onFavorite,onContentFocus)
+            binding.sectionChannels.adapter=adapter
+            adapter.submitList(section.channels,favorites,focusId)
+            val index=section.channels.indexOfFirst{it.groupId==focusId}
+            if(index>=0)binding.sectionChannels.scrollToPosition(index)
+        }
     }
 }

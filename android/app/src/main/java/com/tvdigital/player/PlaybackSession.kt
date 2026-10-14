@@ -34,10 +34,13 @@ data class PlaybackSession(
                 )
             }.distinctBy { it.manifestUrl }
         }
-        return sources.flatMap { url -> copy(manifestUrl = url, fallbackUrls = emptyList()).formatCandidates() }.distinctBy { it.manifestUrl }
+        return sources.flatMap { url -> copy(manifestUrl = url, mimeType = if(url==manifestUrl)mimeType else mimeTypeFor(url,null), fallbackUrls = emptyList()).formatCandidates() }.distinctBy { it.manifestUrl }
     }
 
     private fun formatCandidates(): List<PlaybackSession> {
+        val path=URI(manifestUrl).path.orEmpty()
+        // Solo Xtream define el intercambio de extensiones. No inventar rutas en CDNs HLS.
+        if(!path.contains("/api/xtream/stream/") && !Regex("/live/[^/]+/[^/]+/\\d+\\.(ts|m3u8)$",RegexOption.IGNORE_CASE).containsMatchIn(path)) return listOf(copy(mimeType=mimeTypeFor(manifestUrl,mimeType)))
 
         val hlsUrl = manifestUrl.replace(MPEG_TS_SUFFIX, ".m3u8")
         if (hlsUrl != manifestUrl) {
@@ -77,7 +80,8 @@ data class PlaybackSession(
         private fun mimeTypeFor(url: String, configured: String?): String? = when {
             HLS_SUFFIX.containsMatchIn(url) -> HLS_MIME_TYPE
             MPEG_TS_SUFFIX.containsMatchIn(url) -> MPEG_TS_MIME_TYPE
-            url.substringBefore('?').endsWith(".mpd", ignoreCase = true) -> "application/dash+xml"
+            URI(url).path.orEmpty().endsWith(".mpd", ignoreCase = true) -> "application/dash+xml"
+            URI(url).path.orEmpty().endsWith(".mp4", ignoreCase = true) -> "video/mp4"
             else -> configured
         }
 

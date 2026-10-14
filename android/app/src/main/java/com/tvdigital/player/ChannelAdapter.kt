@@ -2,6 +2,7 @@ package com.tvdigital.player
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 import com.tvdigital.player.databinding.ItemChannelBinding
 
@@ -33,7 +34,11 @@ class ChannelAdapter(
     inner class ChannelViewHolder(private val binding: ItemChannelBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(channel: Channel) {
             binding.favoriteIndicator.text = if (channel.groupId in favoriteIds) "★" else ""
-            RemoteImageLoader.load(binding.channelLogo, channel.logo)
+            binding.missingLogo.text=channel.name
+            binding.missingLogo.visibility=View.VISIBLE
+            RemoteImageLoader.load(binding.channelLogo, channel.logo) { loaded ->
+                binding.missingLogo.visibility=if(loaded)View.GONE else View.VISIBLE
+            }
             binding.root.contentDescription = "${channel.name}. Mantén pulsado OK para marcar como favorito"
             binding.root.setOnClickListener { onClick(channel) }
             binding.root.setOnLongClickListener { onFavorite(channel); true }

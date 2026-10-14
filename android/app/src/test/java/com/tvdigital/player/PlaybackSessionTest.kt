@@ -85,17 +85,15 @@ class PlaybackSessionTest {
         )
 
         val candidates = session.playbackCandidates()
-        assertEquals(2, candidates.size)
+        assertEquals(1, candidates.size)
         assertEquals("HLS", candidates[0].formatLabel())
-        assertEquals("http://provider.example/live/channel.ts?token=short", candidates[1].manifestUrl)
-        assertEquals("TS", candidates[1].formatLabel())
     }
 
     @Test
     fun respectsExplicitTsPreference() {
         val session = PlaybackSession(
             contentId = "canal-ts",
-            manifestUrl = "http://provider.example/live/channel.ts?token=short",
+            manifestUrl = "http://provider.example/live/user/token/123.ts?token=short",
             mimeType = "video/mp2t",
             streamHeaders = emptyMap(),
             drm = null
@@ -151,8 +149,14 @@ class PlaybackSessionTest {
 
         val candidates = session.playbackCandidates()
 
-        assertEquals(4, candidates.size)
+        assertEquals(2, candidates.size)
         assertEquals("https://primary.example/live.m3u8", candidates[0].manifestUrl)
-        assertEquals("https://backup.example/live.m3u8", candidates[2].manifestUrl)
+        assertEquals("https://backup.example/live.m3u8", candidates[1].manifestUrl)
+    }
+
+    @Test
+    fun backupDoesNotInheritPrimaryDashMime(){
+        val session=PlaybackSession("movie:8","https://primary.example/video.mpd","application/dash+xml",emptyMap(),null,listOf("https://backup.example/video.mp4"))
+        assertEquals("video/mp4",session.playbackCandidates()[1].mimeType)
     }
 }
