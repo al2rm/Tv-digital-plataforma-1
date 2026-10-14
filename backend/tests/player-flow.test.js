@@ -131,6 +131,32 @@ test('flujo real panel → acceso Android → catálogo → suscripción y contr
   const withFallback=await request(`/playback/session/channel:${content.id}`,{token:client});
   assert.deepEqual(withFallback.data.fallbackUrls,['https://backup.example.test/demo.m3u8']);
  });
+ await t.test('diagnóstico persiste fallas y no da por reproducibles los proveedores Xtream',async()=>{
+  const item=(await request('/admin/v2/content/live_channels',{method:'POST',token:admin,body:{nombre:'Diagnóstico prueba',manifest_url:'https://8.8.8.8/health.m3u8',fallback_manifest_url:'https://8.8.4.4/backup.m3u8',activo:true}})).data;
+  const originalFetch=globalThis.fetch;let failAll=false;
+  globalThis.fetch=async(input,options)=>{
+   const target=String(input);
+   if(target==='https://8.8.8.8/health.m3u8')return new Response('Not found',{status:404});
+   if(target==='https://8.8.4.4/backup.m3u8')return failAll?new Response('Forbidden',{status:403}):new Response('#EXTM3U\n#EXTINF:6\nsegment.ts',{status:200});
+   return originalFetch(input,options);
+  };
+  try{
+   assert.equal((await request('/admin/v2/content/live_channels/diagnose',{method:'POST',token:client,body:{ids:[item.id]}})).status,403);
+   const good=await request('/admin/v2/content/live_channels/diagnose',{method:'POST',token:admin,body:{ids:[item.id]}});
+   assert.equal(good.status,200);assert.equal(good.data.summary.fallback,1);assert.equal(good.data.items[0].consecutive_failures,0);
+   failAll=true;
+   for(let attempt=1;attempt<=3;attempt++){
+    const bad=await request('/admin/v2/content/live_channels/diagnose',{method:'POST',token:admin,body:{ids:[item.id]}});
+    assert.equal(bad.data.items[0].consecutive_failures,attempt);assert.equal(bad.data.summary.available,0);
+   }
+   assert.equal((await query('SELECT activo FROM live_channels WHERE id=$1',[item.id])).rows[0].activo,true);
+   const xtream=(await query('SELECT id FROM live_channels WHERE xtream_provider_id IS NOT NULL LIMIT 1')).rows[0];
+   const pending=await request('/admin/v2/content/live_channels/diagnose',{method:'POST',token:admin,body:{ids:[xtream.id]}});
+   assert.equal(pending.data.summary.available,0);assert.equal(pending.data.summary.unverified,1);
+   assert.equal((await request('/admin/v2/content/live_channels/diagnose',{method:'POST',token:admin,body:{ids:[]}})).status,400);
+   assert.equal((await request('/admin/v2/content/live_channels/diagnose',{method:'POST',token:admin,body:{ids:Array.from({length:101},(_,i)=>i+1)}})).status,400);
+  }finally{globalThis.fetch=originalFetch;await request(`/admin/v2/content/live_channels/${item.id}`,{method:'DELETE',token:admin});}
+ });
  await t.test('HTTPS, DRM y ocultación se validan',async()=>{
   const cleartext=await request('/admin/v2/content/movies',{method:'POST',token:admin,body:{titulo:'HTTP permitido',manifest_url:'http://example.test/video.mp4'}});assert.equal(cleartext.status,201);
   const cleartextPlayback=await request(`/playback/session/movie:${cleartext.data.id}`,{token:admin});assert.equal(cleartextPlayback.status,200);assert.equal(cleartextPlayback.data.manifestUrl,'http://example.test/video.mp4');

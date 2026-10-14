@@ -17,7 +17,7 @@ if (env.db.ssl) {
   connectionConfig.ssl = { rejectUnauthorized: false };
 }
 
-export const pool = new Pool(connectionConfig);
+export const pool = new Pool({...connectionConfig, connectionTimeoutMillis:5000});
 
 export const testConnection = async () => {
   const result = await pool.query("SELECT NOW()");

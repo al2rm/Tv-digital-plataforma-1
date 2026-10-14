@@ -11,6 +11,8 @@
     "test:production": "node --test smoke/production-static.smoke.js",
     "check": "node scripts/check-syntax.js",
     "db:migrate": "node src/database/migrate.js",
+    "db:backup": "node scripts/database-backup.js",
+    "db:backup:verify": "node scripts/database-backup.js --verify",
     "admin:create": "node scripts/create-admin.js"
   },
   "keywords": [
