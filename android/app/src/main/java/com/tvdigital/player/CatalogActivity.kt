@@ -67,6 +67,7 @@ class CatalogActivity : ComponentActivity() {
     }
 
     private fun show(target:Mode){
+        if(target!=mode)searchQuery=""
         mode=target
         binding.catalogPanel.visibility=if(target in listOf(Mode.SETTINGS,Mode.ABOUT))View.GONE else View.VISIBLE
         binding.settingsPanel.visibility=if(target==Mode.SETTINGS)View.VISIBLE else View.GONE

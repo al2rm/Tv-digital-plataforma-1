@@ -157,7 +157,8 @@ class PlayerActivity : Activity() {
                             updateDiagnostics(session, "Buffering")
                         }
                         Player.STATE_READY -> {
-                            binding.statusText.text = "Señal recibida. Esperando la primera imagen…"
+                            if(renderedFirstFrame)binding.loading.visibility=View.GONE
+                            binding.statusText.text = if(renderedFirstFrame)"Reproduciendo" else "Señal recibida. Esperando la primera imagen…"
                             updateDiagnostics(session, "Señal lista")
                         }
                         Player.STATE_ENDED -> if(session.contentId.startsWith("channel:") || !renderedFirstFrame) {
