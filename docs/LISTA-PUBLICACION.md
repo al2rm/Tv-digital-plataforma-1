@@ -32,6 +32,8 @@ de PostgreSQL: seguir RESPALDO-PRODUCCION.md.
 La variante release segura rechaza HTTP por defecto. Si el proveedor necesita HTTP,
 generar una variante explícita con `-PALLOW_HTTP_STREAMS=true`; no desactivar TLS de
 licencias ni validación de certificados. El debug admite HTTP para pruebas.
+El flujo CI ofrece ambos artefactos release: HTTPS seguro y variante HTTP heredada.
+HTTP no cifra las transmisiones; usarlo solo con fuentes autorizadas que lo requieran.
 
 Si un canal no tiene logo, su nombre se muestra como respaldo; cuando carga el logo,
 la tarjeta conserva el aspecto solo imagen acordado.
@@ -50,3 +52,10 @@ El flujo genera release sin credenciales. La firma se realiza localmente con el
 keystore configurado o con un entorno seguro autorizado; nunca subir el keystore ni
 keystore.properties a Git. El certificado debe coincidir con la versión instalada
 para permitir una actualización. Mantener una copia privada de la clave antes de distribuir.
+Desde la carpeta `android`, con Java 17 y la configuración privada existente:
+
+```sh
+java scripts/SignRelease.java /ruta/app-release-unsigned.apk /ruta/apksigner.jar /ruta/nuevo-release.apk
+```
+
+El programa rechaza sobrescribir una salida y comprueba la firma inmediatamente.
