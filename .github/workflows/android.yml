@@ -26,12 +26,12 @@ jobs:
       - name: Verificar y compilar APK de prueba
         working-directory: android
         run: >-
-          ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
           -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/
       - name: Compilar APK release sin credenciales
         working-directory: android
         run: |
-          ./gradlew --no-daemon lintRelease assembleRelease \
+          ./gradlew --no-daemon :app:lintRelease :app:assembleRelease \
             -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" app/build/outputs/apk/release/apksigner.jar
       - uses: actions/upload-artifact@v4
@@ -47,7 +47,7 @@ jobs:
       - name: Compilar variante para proveedores HTTP autorizados
         working-directory: android
         run: |
-          ./gradlew --no-daemon lintRelease assembleRelease \
+          ./gradlew --no-daemon :app:lintRelease :app:assembleRelease \
             -PBACKEND_BASE_URL=https://tv-digital-pro-demo-al2rm.onrender.com/ \
             -PALLOW_HTTP_STREAMS=true
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" app/build/outputs/apk/release/apksigner.jar

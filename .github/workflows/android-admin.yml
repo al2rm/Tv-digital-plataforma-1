@@ -1,0 +1,45 @@
+name: Compilar APK Administración
+on:
+  push:
+    branches: [main]
+    paths: ['android/adminapp/**', 'android/settings.gradle.kts', 'android/build.gradle.kts', '.github/workflows/android-admin.yml']
+  pull_request:
+    paths: ['android/adminapp/**', 'android/settings.gradle.kts', 'android/build.gradle.kts', '.github/workflows/android-admin.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admin-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Instalar SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Probar y compilar administración
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon :adminapp:testDebugUnitTest :adminapp:lintDebug :adminapp:lintRelease :adminapp:assembleDebug :adminapp:assembleRelease
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" adminapp/build/outputs/apk/release/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TV-Digital-Administracion-release-unsigned
+          path: android/adminapp/build/outputs/apk/release/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TV-Digital-Administracion-debug
+          path: android/adminapp/build/outputs/apk/debug/adminapp-debug.apk
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Administracion-reportes
+          path: android/adminapp/build/reports/
