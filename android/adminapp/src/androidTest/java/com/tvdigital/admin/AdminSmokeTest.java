@@ -54,15 +54,16 @@ public class AdminSmokeTest {
         }
     }
 
-    @Test public void delayedWhatsAppWindowOffersNativeConfirmation() throws Exception {
+    @Test public void assistedWhatsAppOpensWithoutWebViewUserActivation() throws Exception {
         try (ActivityScenario<AdminActivity> scenario = ActivityScenario.launch(AdminActivity.class)) {
             scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).loadDataWithBaseURL(
                     BuildConfig.PANEL_URL,
                     "<html><head><title>native-test-ready</title></head><body>Prueba local</body></html>",
                     "text/html", "UTF-8", null));
             awaitFixture(scenario);
-            scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).evaluateJavascript(
-                    "setTimeout(()=>window.open('https://wa.me/595981234567?text=Prueba','_blank','noopener,noreferrer'),150)", null));
+            assertEquals("\"object\"", evaluate(scenario, "typeof window.TvAdminLinks"));
+            assertEquals("true", evaluate(scenario, "window.open.toString().includes('TvAdminLinks')"));
+            assertEquals("null", evaluate(scenario, "window.open('https://wa.me/595981234567?text=Prueba','_blank','noopener,noreferrer')"));
             onView(isRoot()).perform(waitForWebView());
             onView(withText("Abrir WhatsApp")).check(matches(isDisplayed()));
             onView(withText("Cancelar")).perform(click());

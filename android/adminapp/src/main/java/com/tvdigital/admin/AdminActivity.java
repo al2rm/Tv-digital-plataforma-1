@@ -223,6 +223,7 @@ public class AdminActivity extends ComponentActivity {
                     });
             WebViewCompat.addWebMessageListener(web, "TvAdminLinks", Collections.singleton(policy.origin),
                     (view, message, sourceOrigin, isMainFrame, replyProxy) -> {
+                        if (BuildConfig.DEBUG) android.util.Log.d("TvAdminPopup", "link: main=" + isMainFrame + ", source=" + policy.owns(sourceOrigin.toString()) + ", current=" + policy.owns(view.getUrl()) + ", failed=" + failed);
                         if (!isMainFrame || view != web || failed || !policy.owns(sourceOrigin.toString()) || !policy.owns(view.getUrl())) return;
                         String url = message.getData();
                         if (url != null && url.length() <= 32768 && PanelPolicy.isAssistedWhatsApp(url)) confirmWhatsApp(url);
