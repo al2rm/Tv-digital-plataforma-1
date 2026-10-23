@@ -62,30 +62,33 @@ public class AdminActivity extends ComponentActivity {
     private TextView errorText;
     private ProgressBar progress;
     private TextView serverLabel;
-    private BackupPayload pendingBackup;
+    private PendingBackupStore backupStore;
+    private final BackupRequestGate backupGate = new BackupRequestGate(android.os.SystemClock::elapsedRealtime);
     private boolean failed;
     private final Runnable timeout = () -> showError("El servidor está tardando en responder. Si estaba suspendido, espera un momento y pulsa Reintentar.");
     private final ActivityResultLauncher<String> saveBackup = registerForActivityResult(
             new ActivityResultContracts.CreateDocument("application/json"), uri -> {
-                BackupPayload backup = pendingBackup;
-                pendingBackup = null;
-                if (uri == null || backup == null) {
+                if (uri == null) {
+                    backupStore.clear();
                     toast("Guardado cancelado.");
                     return;
                 }
                 files.execute(() -> {
                     try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
+                        BackupPayload backup = backupStore.read();
+                        if (backup == null) throw new java.io.IOException("No se encontró la copia pendiente");
                         if (out == null) throw new java.io.IOException();
                         out.write(backup.bytes);
                         handler.post(() -> toast("Copia guardada. Consérvala en un lugar privado."));
                     } catch (Exception ignored) {
-                        handler.post(() -> toast("No se pudo guardar la copia. Revisa el espacio disponible."));
-                    }
+                        handler.post(() -> toast("No se pudo recuperar o guardar la copia. Genera otra desde Menú."));
+                    } finally { backupStore.clear(); }
                 });
             });
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        backupStore = new PendingBackupStore(getNoBackupFilesDir());
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         String saved = getPreferences(MODE_PRIVATE).getString("server", BuildConfig.PANEL_URL);
@@ -182,6 +185,7 @@ public class AdminActivity extends ComponentActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void createWebView() {
+        backupGate.cancel();
         if (web != null) {
             content.removeView(web);
             web.stopLoading();
@@ -198,19 +202,21 @@ public class AdminActivity extends ComponentActivity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSupportMultipleWindows(true);
-        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setUserAgentString(settings.getUserAgentString() + " TVDigitalAdmin/" + BuildConfig.VERSION_NAME);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(web, "TvAdminFiles", Collections.singleton(policy.origin),
                     (view, message, sourceOrigin, isMainFrame, replyProxy) -> {
                         if (!isMainFrame || view != web || !policy.owns(sourceOrigin.toString()) || !policy.owns(view.getUrl())) return;
-                        if (pendingBackup != null) { toast("Termina de guardar la copia anterior."); return; }
+                        if (!backupGate.consume()) return;
+                        if (backupStore.hasPending()) { toast("Termina de guardar la copia anterior."); return; }
                         try {
-                            pendingBackup = new BackupPayload(message.getData());
-                            saveBackup.launch(pendingBackup.name);
+                            BackupPayload backup = new BackupPayload(message.getData());
+                            backupStore.save(message.getData());
+                            saveBackup.launch(backup.name);
                         } catch (Exception error) {
-                            pendingBackup = null;
+                            backupStore.clear();
                             toast("No se pudo preparar la copia. Revisa el formato o usa el navegador.");
                         }
                     });
@@ -225,6 +231,7 @@ public class AdminActivity extends ComponentActivity {
                 return true;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                backupGate.cancel();
                 if (!policy.owns(url)) { view.stopLoading(); showError("La página intentó salir del servidor configurado."); return; }
                 failed = false;
                 errorPanel.setVisibility(View.GONE);
@@ -251,12 +258,21 @@ public class AdminActivity extends ComponentActivity {
         web.setWebChromeClient(new WebChromeClient() {
             @Override public void onProgressChanged(WebView view, int value) { progress.setProgress(value); }
             @Override public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
-                if (!isUserGesture) return false;
+                if (view != web || !policy.owns(view.getUrl()) || failed) return false;
                 WebView popup = new WebView(AdminActivity.this);
+                popup.getSettings().setAllowFileAccess(false);
+                popup.getSettings().setAllowContentAccess(false);
                 popup.setWebViewClient(new WebViewClient() {
                     @Override public boolean shouldOverrideUrlLoading(WebView child, WebResourceRequest request) {
                         String url = request.getUrl().toString();
-                        if (policy.owns(url)) web.loadUrl(url); else openExternal(url);
+                        if (isUserGesture) {
+                            if (policy.owns(url)) web.loadUrl(url); else openExternal(url);
+                        } else if (PanelPolicy.isAssistedWhatsApp(url)) {
+                            new AlertDialog.Builder(AdminActivity.this).setTitle("Abrir WhatsApp")
+                                    .setMessage("Se abrirá el mensaje preparado. Podrás revisarlo antes de enviarlo.")
+                                    .setNegativeButton("Cancelar", null)
+                                    .setPositiveButton("Abrir", (d, w) -> openExternal(url)).show();
+                        } else toast("Ventana automática bloqueada.");
                         child.destroy();
                         return true;
                     }
@@ -276,7 +292,7 @@ public class AdminActivity extends ComponentActivity {
     }
 
     private void navigate(String path) {
-        if (pendingBackup != null) { toast("Termina de guardar la copia antes de cambiar de sección."); return; }
+        if (backupStore.hasPending()) { toast("Termina de guardar la copia antes de cambiar de sección."); return; }
         web.loadUrl(policy.origin + path);
     }
 
@@ -292,6 +308,7 @@ public class AdminActivity extends ComponentActivity {
         PopupMenu menu = new PopupMenu(this, anchor);
         String[] actions = {"Recargar", "Configurar servidor", "Suscripciones", "Conexión y Xtream", "Actividad y papelera", "Copia de seguridad", "Borrar sesión", "Acerca de"};
         for (int i = 0; i < actions.length; i++) menu.getMenu().add(0, i, i, actions[i]);
+        if (backupStore.hasPending()) menu.getMenu().add(0, 8, 8, "Descartar copia pendiente");
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case 0: web.reload(); break;
@@ -303,6 +320,7 @@ public class AdminActivity extends ComponentActivity {
                 case 6: new AlertDialog.Builder(this).setTitle("Borrar sesión de este dispositivo")
                         .setMessage("Se eliminarán los datos de acceso guardados en esta APK. Los clientes y suscripciones del servidor se conservarán.")
                         .setNegativeButton("Cancelar", null).setPositiveButton("Borrar sesión", (d, w) -> resetSession(policy)).show(); break;
+                case 8: backupStore.clear(); toast("Copia pendiente descartada."); break;
                 default: new AlertDialog.Builder(this).setTitle("TV Digital Administración " + BuildConfig.VERSION_NAME)
                         .setMessage("Panel de gestión para Android 7 o superior. Usa tu cuenta de administrador, vendedor o soporte. Las opciones disponibles dependen del rol y del servidor. Requiere conexión a Internet.")
                         .setPositiveButton("Cerrar", null).show();
@@ -313,7 +331,7 @@ public class AdminActivity extends ComponentActivity {
     }
 
     private void configureServer() {
-        if (pendingBackup != null) { toast("Termina de guardar la copia antes de cambiar de servidor."); return; }
+        if (backupStore.hasPending()) { toast("Termina o descarta la copia pendiente desde Menú antes de cambiar de servidor."); return; }
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
@@ -340,7 +358,7 @@ public class AdminActivity extends ComponentActivity {
     }
 
     private void resetSession(PanelPolicy next) {
-        if (pendingBackup != null) { toast("Termina de guardar la copia antes de borrar la sesión."); return; }
+        if (backupStore.hasPending()) { toast("Termina o descarta la copia pendiente desde Menú antes de borrar la sesión."); return; }
         web.stopLoading();
         web.clearCache(true);
         web.clearHistory();
@@ -357,14 +375,15 @@ public class AdminActivity extends ComponentActivity {
 
     private void requestBackup() {
         if (!policy.owns(web.getUrl()) || failed) { toast("Conecta con el panel e inicia sesión primero."); return; }
-        if (pendingBackup != null) { toast("Termina de guardar la copia anterior."); return; }
+        if (backupStore.hasPending()) { toast("Termina o descarta la copia pendiente desde Menú."); return; }
+        if (!backupGate.begin()) { toast("La copia se está preparando. Espera un momento."); return; }
         try (InputStream source = getAssets().open("backup.js")) {
             java.io.ByteArrayOutputStream script = new java.io.ByteArrayOutputStream();
             byte[] buffer = new byte[2048];
             int count;
             while ((count = source.read(buffer)) != -1) script.write(buffer, 0, count);
             web.evaluateJavascript(script.toString(StandardCharsets.UTF_8.name()), null);
-        } catch (Exception ignored) { toast("No se pudo iniciar la copia de seguridad."); }
+        } catch (Exception ignored) { backupGate.cancel(); toast("No se pudo iniciar la copia de seguridad."); }
     }
 
     private void openExternal(String url) {
@@ -387,6 +406,7 @@ public class AdminActivity extends ComponentActivity {
     }
     @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
     @Override protected void onDestroy() {
+        backupGate.cancel();
         handler.removeCallbacksAndMessages(null);
         files.shutdown();
         if (web != null) { content.removeView(web); web.destroy(); }

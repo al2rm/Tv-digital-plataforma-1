@@ -29,4 +29,10 @@ public class PanelPolicyTest {
         assertTrue(PanelPolicy.canOpenExternally("tel:+595981234567"));
         for (String url : new String[]{"intent://evil/#Intent;end", "javascript:alert(1)", "http://example.com", "file:///sdcard/a", "content://settings", "data:text/html,test", "https://u:p@example.com", "https://example.com\n", null}) assertFalse(PanelPolicy.canOpenExternally(url));
     }
+    @Test public void delayedWhatsAppPopupHasAnExactHostAndPhoneNumber() {
+        assertTrue(PanelPolicy.isAssistedWhatsApp("https://wa.me/595981234567?text=Prueba"));
+        for (String url : new String[]{"http://wa.me/595981234567", "https://wa.me.evil.test/595981234567", "https://wa.me:8443/595981234567", "https://wa.me/not-a-phone", "https://user@wa.me/595981234567", "https://wa.me/595981234567#other", null}) {
+            assertFalse(PanelPolicy.isAssistedWhatsApp(url));
+        }
+    }
 }

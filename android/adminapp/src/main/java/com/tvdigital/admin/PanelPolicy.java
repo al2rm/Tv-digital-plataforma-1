@@ -45,6 +45,15 @@ public final class PanelPolicy {
         }
     }
 
+    public static boolean isAssistedWhatsApp(String input) {
+        try {
+            URI url = parse(input);
+            return "https".equalsIgnoreCase(url.getScheme()) && "wa.me".equalsIgnoreCase(url.getHost())
+                    && url.getRawUserInfo() == null && (url.getPort() == -1 || url.getPort() == 443)
+                    && url.getRawFragment() == null && url.getRawPath().matches("/[0-9]{7,15}");
+        } catch (IllegalArgumentException ignored) { return false; }
+    }
+
     private static URI parse(String input) {
         if (input == null || input.contains("\\") || input.chars().anyMatch(c -> c <= 32 || c == 127)) {
             throw new IllegalArgumentException("Dirección no válida.");

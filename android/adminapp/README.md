@@ -10,6 +10,8 @@ APK independiente (`com.tvdigital.admin`) para administrar el panel React existe
 4. En **Menú → Copia de seguridad**, el backend verifica que seas administrador y Android pregunta dónde guardar el JSON (máximo 4 MB). Funciona incluso con la versión previa del panel web; el botón web de descarga de esa versión orienta hacia este menú. Nunca se descarga una copia automáticamente.
 5. Usa **Borrar sesión** para retirar los accesos guardados del dispositivo. No elimina registros del servidor.
 
+Las copias en preparación se conservan temporalmente en el almacenamiento privado excluido de respaldos de Android para poder terminar el guardado si se reinicia la actividad. Se borran al guardar, cancelar, descartarlas desde Menú o detectar que llevan más de una hora pendientes. El puente de exportación solo acepta una respuesta durante 45 segundos tras pulsar la opción nativa. WhatsApp admite respuestas lentas de la API con una confirmación nativa para los enlaces HTTPS `wa.me` válidos.
+
 No permite HTTP para cuentas administrativas, certificados inválidos, navegación embebida a otro servidor, acceso a archivos locales ni puentes JavaScript abiertos a cualquier origen. Los enlaces externos iniciados por el usuario se abren en su aplicación correspondiente. Las capturas de pantalla del panel están deshabilitadas para proteger los datos de clientes.
 
 ## Compilación
