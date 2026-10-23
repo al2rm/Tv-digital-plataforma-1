@@ -342,14 +342,15 @@ public class AdminActivity extends ComponentActivity {
     private void resetSession(PanelPolicy next) {
         if (pendingBackup != null) { toast("Termina de guardar la copia antes de borrar la sesión."); return; }
         web.stopLoading();
-        WebStorage.getInstance().deleteAllData();
         web.clearCache(true);
         web.clearHistory();
+        policy = next;
+        getPreferences(MODE_PRIVATE).edit().putString("server", policy.home).apply();
+        createWebView(); // Destroy the old document before removing its stored session.
+        WebStorage.getInstance().deleteAllData();
         CookieManager.getInstance().removeAllCookies(done -> {
+            if (isFinishing() || isDestroyed()) return;
             CookieManager.getInstance().flush();
-            policy = next;
-            getPreferences(MODE_PRIVATE).edit().putString("server", policy.home).apply();
-            createWebView();
             web.loadUrl(policy.home);
         });
     }
