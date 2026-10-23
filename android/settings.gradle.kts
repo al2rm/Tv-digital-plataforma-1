@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "TvDigitalAndroid"
 include(":app")
+include(":adminapp")
