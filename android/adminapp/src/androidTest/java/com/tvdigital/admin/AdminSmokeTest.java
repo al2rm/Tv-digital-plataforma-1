@@ -5,6 +5,9 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.widget.EditText;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -14,6 +17,8 @@ import org.hamcrest.Matcher;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import static androidx.test.espresso.Espresso.onView;
@@ -56,10 +61,7 @@ public class AdminSmokeTest {
 
     @Test public void assistedWhatsAppOpensWithoutWebViewUserActivation() throws Exception {
         try (ActivityScenario<AdminActivity> scenario = ActivityScenario.launch(AdminActivity.class)) {
-            scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).loadDataWithBaseURL(
-                    BuildConfig.PANEL_URL,
-                    "<html><head><title>native-test-ready</title></head><body>Prueba local</body></html>",
-                    "text/html", "UTF-8", null));
+            loadFixture(scenario);
             awaitFixture(scenario);
             assertEquals("\"object\"", evaluate(scenario, "typeof window.TvAdminLinks"));
             assertEquals("true", evaluate(scenario, "window.open.toString().includes('TvAdminLinks')"));
@@ -72,10 +74,7 @@ public class AdminSmokeTest {
 
     @Test public void originAloneCannotStartAnUnrequestedExport() throws Exception {
         try (ActivityScenario<AdminActivity> scenario = ActivityScenario.launch(AdminActivity.class)) {
-            scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).loadDataWithBaseURL(
-                    BuildConfig.PANEL_URL,
-                    "<html><head><title>native-test-ready</title></head><body>Prueba local</body></html>",
-                    "text/html", "UTF-8", null));
+            loadFixture(scenario);
             awaitFixture(scenario);
             assertEquals("\"object\"", evaluate(scenario, "typeof window.TvAdminFiles"));
             scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).evaluateJavascript(
@@ -84,6 +83,30 @@ public class AdminSmokeTest {
             onView(withText("TV Digital · Administración")).check(matches(isDisplayed()));
             scenario.onActivity(activity -> assertFalse(new PendingBackupStore(activity.getNoBackupFilesDir()).hasPending()));
         }
+    }
+
+    private static void loadFixture(ActivityScenario<AdminActivity> scenario) {
+        scenario.onActivity(activity -> {
+            if (android.os.Build.VERSION.SDK_INT < 26) throw new IllegalStateException("El emulador de estas pruebas requiere API 26 o superior");
+            WebView web = findWebView(activity.getWindow().getDecorView());
+            WebViewClient original = web.getWebViewClient();
+            String fixtureUrl = BuildConfig.PANEL_URL + "__native_test_fixture__";
+            web.setWebViewClient(new WebViewClient() {
+                @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    if (fixtureUrl.equals(request.getUrl().toString())) {
+                        String html = "<html><head><title>native-test-ready</title></head><body>Prueba local</body></html>";
+                        return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(html.getBytes(StandardCharsets.UTF_8)));
+                    }
+                    return original.shouldInterceptRequest(view, request);
+                }
+                @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) { original.onPageStarted(view, url, icon); }
+                @Override public void onPageFinished(WebView view, String url) { original.onPageFinished(view, url); }
+                @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return original.shouldOverrideUrlLoading(view, request); }
+            });
+            // An actual HTTPS navigation gives getUrl() a trusted origin; loadDataWithBaseURL
+            // leaves getUrl() at about:blank on some WebViews and must fail the native guard.
+            web.loadUrl(fixtureUrl);
+        });
     }
 
     private static void awaitFixture(ActivityScenario<AdminActivity> scenario) throws Exception {
