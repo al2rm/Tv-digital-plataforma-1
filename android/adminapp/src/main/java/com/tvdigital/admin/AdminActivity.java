@@ -258,6 +258,7 @@ public class AdminActivity extends ComponentActivity {
         web.setWebChromeClient(new WebChromeClient() {
             @Override public void onProgressChanged(WebView view, int value) { progress.setProgress(value); }
             @Override public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                if (BuildConfig.DEBUG) android.util.Log.d("TvAdminPopup", "requested: trusted=" + policy.owns(view.getUrl()) + ", gesture=" + isUserGesture + ", failed=" + failed);
                 if (view != web || !policy.owns(view.getUrl()) || failed) return false;
                 WebView popup = new WebView(AdminActivity.this);
                 popup.getSettings().setAllowFileAccess(false);
@@ -265,6 +266,7 @@ public class AdminActivity extends ComponentActivity {
                 popup.setWebViewClient(new WebViewClient() {
                     @Override public boolean shouldOverrideUrlLoading(WebView child, WebResourceRequest request) {
                         String url = request.getUrl().toString();
+                        if (BuildConfig.DEBUG) android.util.Log.d("TvAdminPopup", "navigation: whatsapp=" + PanelPolicy.isAssistedWhatsApp(url) + ", blank=" + "about:blank".equals(url));
                         if (isUserGesture) {
                             if (policy.owns(url)) web.loadUrl(url); else openExternal(url);
                         } else if (PanelPolicy.isAssistedWhatsApp(url)) {

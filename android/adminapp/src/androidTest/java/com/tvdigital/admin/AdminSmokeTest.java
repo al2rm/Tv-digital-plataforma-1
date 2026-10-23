@@ -11,6 +11,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
 import org.hamcrest.Matcher;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import static androidx.test.espresso.Espresso.onView;
@@ -51,28 +54,57 @@ public class AdminSmokeTest {
         }
     }
 
-    @Test public void delayedWhatsAppWindowOffersNativeConfirmation() {
+    @Test public void delayedWhatsAppWindowOffersNativeConfirmation() throws Exception {
         try (ActivityScenario<AdminActivity> scenario = ActivityScenario.launch(AdminActivity.class)) {
             scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).loadDataWithBaseURL(
                     BuildConfig.PANEL_URL,
-                    "<html><body><script>setTimeout(()=>window.open('https://wa.me/595981234567?text=Prueba','_blank','noopener,noreferrer'),150);</script></body></html>",
+                    "<html><head><title>native-test-ready</title></head><body>Prueba local</body></html>",
                     "text/html", "UTF-8", null));
+            awaitFixture(scenario);
+            scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).evaluateJavascript(
+                    "setTimeout(()=>window.open('https://wa.me/595981234567?text=Prueba','_blank','noopener,noreferrer'),150)", null));
             onView(isRoot()).perform(waitForWebView());
             onView(withText("Abrir WhatsApp")).check(matches(isDisplayed()));
             onView(withText("Cancelar")).perform(click());
         }
     }
 
-    @Test public void originAloneCannotStartAnUnrequestedExport() {
+    @Test public void originAloneCannotStartAnUnrequestedExport() throws Exception {
         try (ActivityScenario<AdminActivity> scenario = ActivityScenario.launch(AdminActivity.class)) {
             scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).loadDataWithBaseURL(
                     BuildConfig.PANEL_URL,
-                    "<html><body><script>if(window.TvAdminFiles)TvAdminFiles.postMessage(JSON.stringify({name:'tv-digital-backup-2026-10-23.json',mime:'application/json',json:'{}'}));</script></body></html>",
+                    "<html><head><title>native-test-ready</title></head><body>Prueba local</body></html>",
                     "text/html", "UTF-8", null));
+            awaitFixture(scenario);
+            assertEquals("\"object\"", evaluate(scenario, "typeof window.TvAdminFiles"));
+            scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).evaluateJavascript(
+                    "TvAdminFiles.postMessage(JSON.stringify({name:'tv-digital-backup-2026-10-23.json',mime:'application/json',json:'{}'}))", null));
             onView(isRoot()).perform(waitForWebView());
             onView(withText("TV Digital · Administración")).check(matches(isDisplayed()));
             scenario.onActivity(activity -> assertFalse(new PendingBackupStore(activity.getNoBackupFilesDir()).hasPending()));
         }
+    }
+
+    private static void awaitFixture(ActivityScenario<AdminActivity> scenario) throws Exception {
+        long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(12);
+        String title = null;
+        do {
+            title = evaluate(scenario, "document.title");
+            if ("\"native-test-ready\"".equals(title)) return;
+            Thread.sleep(100);
+        } while (System.nanoTime() < limit);
+        fail("La página local no terminó de cargar: " + title);
+    }
+
+    private static String evaluate(ActivityScenario<AdminActivity> scenario, String script) throws Exception {
+        CountDownLatch ready = new CountDownLatch(1);
+        AtomicReference<String> value = new AtomicReference<>();
+        scenario.onActivity(activity -> findWebView(activity.getWindow().getDecorView()).evaluateJavascript(script, result -> {
+            value.set(result);
+            ready.countDown();
+        }));
+        assertTrue("WebView no respondió al script de prueba", ready.await(3, TimeUnit.SECONDS));
+        return value.get();
     }
 
     private static ViewAction waitForWebView() {
