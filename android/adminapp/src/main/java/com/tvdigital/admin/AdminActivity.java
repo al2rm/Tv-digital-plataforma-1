@@ -65,6 +65,7 @@ public class AdminActivity extends ComponentActivity {
     private PendingBackupStore backupStore;
     private final BackupRequestGate backupGate = new BackupRequestGate(android.os.SystemClock::elapsedRealtime);
     private boolean failed;
+    private AlertDialog externalPrompt;
     private final Runnable timeout = () -> showError("El servidor está tardando en responder. Si estaba suspendido, espera un momento y pulsa Reintentar.");
     private final ActivityResultLauncher<String> saveBackup = registerForActivityResult(
             new ActivityResultContracts.CreateDocument("application/json"), uri -> {
@@ -220,6 +221,17 @@ public class AdminActivity extends ComponentActivity {
                             toast("No se pudo preparar la copia. Revisa el formato o usa el navegador.");
                         }
                     });
+            WebViewCompat.addWebMessageListener(web, "TvAdminLinks", Collections.singleton(policy.origin),
+                    (view, message, sourceOrigin, isMainFrame, replyProxy) -> {
+                        if (!isMainFrame || view != web || failed || !policy.owns(sourceOrigin.toString()) || !policy.owns(view.getUrl())) return;
+                        String url = message.getData();
+                        if (url != null && url.length() <= 32768 && PanelPolicy.isAssistedWhatsApp(url)) confirmWhatsApp(url);
+                    });
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                try {
+                    WebViewCompat.addDocumentStartJavaScript(web, readAsset("links.js"), Collections.singleton(policy.origin));
+                } catch (java.io.IOException ignored) { toast("No se pudo preparar la apertura de enlaces."); }
+            }
         }
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -270,10 +282,7 @@ public class AdminActivity extends ComponentActivity {
                         if (isUserGesture) {
                             if (policy.owns(url)) web.loadUrl(url); else openExternal(url);
                         } else if (PanelPolicy.isAssistedWhatsApp(url)) {
-                            new AlertDialog.Builder(AdminActivity.this).setTitle("Abrir WhatsApp")
-                                    .setMessage("Se abrirá el mensaje preparado. Podrás revisarlo antes de enviarlo.")
-                                    .setNegativeButton("Cancelar", null)
-                                    .setPositiveButton("Abrir", (d, w) -> openExternal(url)).show();
+                            confirmWhatsApp(url);
                         } else toast("Ventana automática bloqueada.");
                         child.destroy();
                         return true;
@@ -379,13 +388,29 @@ public class AdminActivity extends ComponentActivity {
         if (!policy.owns(web.getUrl()) || failed) { toast("Conecta con el panel e inicia sesión primero."); return; }
         if (backupStore.hasPending()) { toast("Termina o descarta la copia pendiente desde Menú."); return; }
         if (!backupGate.begin()) { toast("La copia se está preparando. Espera un momento."); return; }
-        try (InputStream source = getAssets().open("backup.js")) {
+        try {
+            web.evaluateJavascript(readAsset("backup.js"), null);
+        } catch (Exception ignored) { backupGate.cancel(); toast("No se pudo iniciar la copia de seguridad."); }
+    }
+
+    private String readAsset(String name) throws java.io.IOException {
+        try (InputStream source = getAssets().open(name)) {
             java.io.ByteArrayOutputStream script = new java.io.ByteArrayOutputStream();
             byte[] buffer = new byte[2048];
             int count;
             while ((count = source.read(buffer)) != -1) script.write(buffer, 0, count);
-            web.evaluateJavascript(script.toString(StandardCharsets.UTF_8.name()), null);
-        } catch (Exception ignored) { backupGate.cancel(); toast("No se pudo iniciar la copia de seguridad."); }
+            return script.toString(StandardCharsets.UTF_8.name());
+        }
+    }
+
+    private void confirmWhatsApp(String url) {
+        if (externalPrompt != null && externalPrompt.isShowing()) return;
+        externalPrompt = new AlertDialog.Builder(this).setTitle("Abrir WhatsApp")
+                .setMessage("Se abrirá el mensaje preparado. Podrás revisarlo antes de enviarlo.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Abrir", (d, w) -> openExternal(url)).create();
+        externalPrompt.setOnDismissListener(ignored -> externalPrompt = null);
+        externalPrompt.show();
     }
 
     private void openExternal(String url) {
@@ -409,6 +434,7 @@ public class AdminActivity extends ComponentActivity {
     @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
     @Override protected void onDestroy() {
         backupGate.cancel();
+        if (externalPrompt != null) externalPrompt.dismiss();
         handler.removeCallbacksAndMessages(null);
         files.shutdown();
         if (web != null) { content.removeView(web); web.destroy(); }
