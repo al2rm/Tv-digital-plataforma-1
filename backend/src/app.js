@@ -29,7 +29,11 @@ if (env.serveAdmin && !fs.existsSync(adminIndexPath)) {
   );
 }
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: { imgSrc: ["'self'", "data:", "https://image.tmdb.org"] }
+  }
+}));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || env.corsOrigins.includes("*") || env.corsOrigins.includes(origin)) {

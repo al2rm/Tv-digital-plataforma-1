@@ -11,3 +11,4 @@ keystore.properties
 *.keystore
 output/
 tmp/
+admin/ui-reports/

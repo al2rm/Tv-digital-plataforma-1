@@ -26,6 +26,8 @@ test("sirve panel, rutas internas y API desde el mismo proceso", async (t) => {
   assert.equal(rootResponse.status, 200);
   assert.match(rootResponse.headers.get("content-type"), /text\/html/);
   assert.match(rootHtml, /<title>TV Digital Pro/);
+  assert.match(rootResponse.headers.get('content-security-policy'), /img-src 'self' data: https:\/\/image\.tmdb\.org(?:;|$)/);
+  assert.match(rootResponse.headers.get('content-security-policy'), /script-src 'self'/);
 
   const internalRouteResponse = await fetch(`${baseUrl}/clientes`);
   const internalRouteHtml = await internalRouteResponse.text();
@@ -53,6 +55,11 @@ test("sirve panel, rutas internas y API desde el mismo proceso", async (t) => {
   const assets = await fs.readdir(path.join(adminDistPath, "assets"));
   const javascriptFiles = assets.filter((filename) => filename.endsWith(".js"));
   assert.ok(javascriptFiles.length > 0);
+  const assetResponse = await fetch(`${baseUrl}/assets/${javascriptFiles[0]}`, {
+    headers: { Origin: 'https://tv-digital-pro-demo-al2rm.onrender.com' }
+  });
+  assert.equal(assetResponse.status,200);
+  assert.match(assetResponse.headers.get('content-type'), /javascript/);
 
   const javascript = await Promise.all(
     javascriptFiles.map((filename) =>

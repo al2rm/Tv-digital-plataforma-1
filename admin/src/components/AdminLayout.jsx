@@ -10,6 +10,7 @@ import {
   Radio,
   RefreshCw,
   History,
+  Library,
   Users,
   X
 } from "lucide-react";
@@ -25,6 +26,7 @@ const navigation = [
   { to: "/suscripciones", label: "Suscripciones", icon: RefreshCw, roles:['admin','vendedor'] },
   { to: "/pagos", label: "Pagos", icon: CreditCard, roles:['admin','vendedor'] },
   { to: "/catalogo", label: "Catálogo", icon: Tv, roles:['admin','soporte'] },
+  { to: "/stremcore", label: "Stremcore", icon: Library, roles:['admin','soporte'] },
   { to: "/programacion", label: "Series y EPG", icon: CalendarDays, roles:['admin','soporte'] },
   { to: "/conexion", label: "App y proveedor", icon: Link, roles:['admin'] },
   { to: "/actividad", label: "Actividad y papelera", icon: History, roles:['admin'] }
