@@ -55,6 +55,11 @@ test("sirve panel, rutas internas y API desde el mismo proceso", async (t) => {
   const assets = await fs.readdir(path.join(adminDistPath, "assets"));
   const javascriptFiles = assets.filter((filename) => filename.endsWith(".js"));
   assert.ok(javascriptFiles.length > 0);
+  const assetResponse = await fetch(`${baseUrl}/assets/${javascriptFiles[0]}`, {
+    headers: { Origin: 'https://tv-digital-pro-demo-al2rm.onrender.com' }
+  });
+  assert.equal(assetResponse.status,200);
+  assert.match(assetResponse.headers.get('content-type'), /javascript/);
 
   const javascript = await Promise.all(
     javascriptFiles.map((filename) =>

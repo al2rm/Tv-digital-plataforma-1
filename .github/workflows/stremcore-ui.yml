@@ -30,7 +30,7 @@ jobs:
         env:
           PLAYWRIGHT_NODE_MODULES: ${{ runner.temp }}/stremcore-ui/node_modules
         run: |
-          NODE_ENV=test SERVE_ADMIN=true JWT_SECRET=clave-exclusiva-para-pruebas-de-interfaz node --input-type=module -e 'import app from "./backend/src/app.js"; app.listen(4173,"127.0.0.1");' > "$RUNNER_TEMP/stremcore-preview.log" 2>&1 &
+          NODE_ENV=test SERVE_ADMIN=true CORS_ORIGINS=http://127.0.0.1:4173 JWT_SECRET=clave-exclusiva-para-pruebas-de-interfaz node --input-type=module -e 'import app from "./backend/src/app.js"; app.listen(4173,"127.0.0.1");' > "$RUNNER_TEMP/stremcore-preview.log" 2>&1 &
           node admin/smoke/stremcore-ui.cjs
       - uses: actions/upload-artifact@v4
         if: always()
