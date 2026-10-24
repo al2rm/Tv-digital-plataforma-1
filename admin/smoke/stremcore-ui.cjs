@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const origin = process.env.STREMCORE_UI_URL || 'http://127.0.0.1:4173';
 const root = '/api/admin/v2/content/import/stremcore';
-const poster = 'https://images.example.test/poster.svg';
+const poster = 'https://image.tmdb.org/t/p/w500/__stremcore_ui_fixture.svg';
 const movie = (id,title,direct=false) => ({id:String(id),title,poster,date:'2024-01-01',rating:'7.2',genres:['drama'],type:'movies',overview:'Una ficha ficticia utilizada exclusivamente para comprobar el panel.',runtime:90,servers:[{id:'1',name:'Servidor de prueba',language:'Español',quality:'HD',url:direct?'https://8.8.8.8/demo.mp4':'https://player.example.test/embed/demo',direct}]});
 const movies = [movie(11,'Viaje de prueba'),movie(12,'Fuente directa de prueba',true)];
 const series = [{id:'22',title:'Serie de prueba',type:'series',poster,date:'2024-01-01',genres:['drama'],overview:'Serie ficticia.',servers:[]}];
@@ -22,7 +22,7 @@ async function main() {
     page.on('console',message=>{if(message.type()==='error')console.error('UI console:',message.text());});
     page.on('requestfailed',request=>console.error('UI recurso:',request.url(),request.failure()?.errorText));
     await page.addInitScript(()=>localStorage.setItem('tv_digital_admin_session',JSON.stringify({token:'synthetic-local-session',user:{nombre:'Prueba local',email:'admin@example.test',rol:'admin'}})));
-    await page.route('https://**',async route=>{
+    await page.route(/^https:\/\//,async route=>{
       if(route.request().url()===poster)return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#24576b"/><stop offset="1" stop-color="#112238"/></linearGradient></defs><rect width="300" height="450" fill="url(#g)"/><circle cx="150" cy="170" r="50" fill="#5cd7c5" opacity=".5"/><path d="M120 140l70 30-70 30z" fill="#e8ffff"/><text x="150" y="300" text-anchor="middle" font-family="sans-serif" font-size="24" fill="white">TV DIGITAL</text></svg>'});
       unexpectedRequests++;return route.abort();
     });
