@@ -19,6 +19,8 @@ async function main() {
   try {
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
+    page.on('console',message=>{if(message.type()==='error')console.error('UI console:',message.text());});
+    page.on('requestfailed',request=>console.error('UI recurso:',request.url(),request.failure()?.errorText));
     await page.addInitScript(()=>localStorage.setItem('tv_digital_admin_session',JSON.stringify({token:'synthetic-local-session',user:{nombre:'Prueba local',email:'admin@example.test',rol:'admin'}})));
     await page.route('https://**',async route=>{
       if(route.request().url()===poster)return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#24576b"/><stop offset="1" stop-color="#112238"/></linearGradient></defs><rect width="300" height="450" fill="url(#g)"/><circle cx="150" cy="170" r="50" fill="#5cd7c5" opacity=".5"/><path d="M120 140l70 30-70 30z" fill="#e8ffff"/><text x="150" y="300" text-anchor="middle" font-family="sans-serif" font-size="24" fill="white">TV DIGITAL</text></svg>'});
@@ -48,7 +50,7 @@ async function main() {
     });
     await page.goto(origin+'/stremcore');
     await page.getByRole('button',{name:'Ver ficha de Viaje de prueba',exact:true}).waitFor();
-    await page.locator('.strem-poster img').evaluateAll(images=>Promise.all(images.map(async image=>{image.loading='eager';await image.decode();})));
+    await waitForPosters(page);
     assert.equal(await page.locator('.strem-poster img').first().evaluate(image=>image.naturalWidth>0&&image.getBoundingClientRect().height>100),true,'La portada debe cargarse y ocupar el espacio reservado');
     await page.screenshot({path:'admin/ui-reports/stremcore-desktop.png',fullPage:true});
     await page.getByRole('button',{name:'Ver ficha de Viaje de prueba',exact:true}).click();
@@ -88,11 +90,20 @@ async function main() {
     await page.setViewportSize({width:390,height:844});
     await page.getByRole('button',{name:'Películas (2)',exact:true}).click();
     await page.getByRole('button',{name:'Ver ficha de Viaje de prueba',exact:true}).waitFor();
-    await page.locator('.strem-poster img').evaluateAll(images=>Promise.all(images.map(async image=>{image.loading='eager';await image.decode();})));
+    await waitForPosters(page);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),true,'La página móvil no debe tener desplazamiento horizontal');
     await page.screenshot({path:'admin/ui-reports/stremcore-mobile.png',fullPage:true});
     assert.equal(unexpectedRequests,0,'No deben abrirse reproductores externos');assert.deepEqual(errors,[]);
     console.log('UI Stremcore correcta: escritorio, móvil, borrador, publicación directa y selección de episodios nuevos.');
   } finally {await browser.close();}
+}
+async function waitForPosters(page) {
+  await page.locator('.strem-poster img').evaluateAll(images=>images.forEach(image=>{image.loading='eager';}));
+  try {
+    await page.waitForFunction(()=>Array.from(document.querySelectorAll('.strem-poster img')).every(image=>image.complete&&image.naturalWidth>0),null,{timeout:10000});
+  } catch(error) {
+    console.error('Portadas:',await page.locator('.strem-poster img').evaluateAll(images=>images.map(image=>({src:image.src,complete:image.complete,width:image.naturalWidth}))));
+    throw error;
+  }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
