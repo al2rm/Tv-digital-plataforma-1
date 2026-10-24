@@ -34,6 +34,7 @@ async function main() {
         imported.set(`${body.type}:${body.id}`,{id:Number(body.id),activo:body.mode==='publish'});
         data={created:true};message=body.mode==='publish'?'Contenido importado y publicado en la app.':'Ficha guardada como borrador.';
       } else if(path===root+'/series/22/seasons/1')data={number:1,seriesId:'22',episodes:[{number:1,title:'Ya importado',servers:[],existing:{id:1,activo:false}},{number:2,title:'Episodio nuevo',servers:[],existing:null}]};
+      else if(path===root+'/series/22/seasons/2')data={number:2,seriesId:'22',episodes:[{number:1,title:'Otra temporada',servers:[],existing:null}]};
       else if(path===root+'/movies'||path===root+'/series'){
         const type=path.endsWith('/movies')?'movies':'series',query=(url.searchParams.get('q')||'').toLowerCase();
         const items=(type==='movies'?movies:series).filter(item=>item.title.toLowerCase().includes(query)).map(item=>({...item,existing:imported.get(`${type}:${item.id}`)||null}));
@@ -72,11 +73,18 @@ async function main() {
     dialog=page.getByRole('dialog');
     await dialog.getByText('E2 · Episodio nuevo',{exact:true}).waitFor();
     await dialog.getByRole('checkbox',{name:/Seleccionar todos los disponibles/}).check();
+    assert.equal(await dialog.getByRole('checkbox',{name:/E1 · Ya importado/}).isDisabled(),true);
     await dialog.getByLabel('URL directa del episodio').fill('https://8.8.8.8/episode.m3u8');
+    await dialog.getByLabel('Temporada',{exact:true}).fill('2');
+    await dialog.getByRole('button',{name:'Ver temporada',exact:true}).click();
+    await dialog.getByText('E1 · Otra temporada',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('checkbox',{name:/Seleccionar todos los disponibles/}).isChecked(),false);
+    await dialog.getByRole('checkbox',{name:/Seleccionar todos los disponibles/}).check();
+    await dialog.getByLabel('URL directa del episodio').fill('https://8.8.8.8/season-two.m3u8');
     await dialog.getByLabel('Guardar contenido').selectOption('publish');
     await dialog.getByRole('button',{name:'Importar y publicar',exact:true}).click();
     await page.getByRole('dialog').waitFor({state:'hidden'});
-    assert.deepEqual(posts[2].episodeNumbers,[2]);assert.deepEqual(posts[2].episodeUrls,{'2':'https://8.8.8.8/episode.m3u8'});
+    assert.equal(posts[2].season,2);assert.deepEqual(posts[2].episodeNumbers,[1]);assert.deepEqual(posts[2].episodeUrls,{'1':'https://8.8.8.8/season-two.m3u8'});
     await page.setViewportSize({width:390,height:844});
     await page.getByRole('button',{name:'Películas (2)',exact:true}).click();
     await page.getByRole('button',{name:'Ver ficha de Viaje de prueba',exact:true}).waitFor();

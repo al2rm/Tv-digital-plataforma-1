@@ -20,7 +20,7 @@ export default function StremcorePage() {
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([api.get(`${BASE}/meta`,{signal:controller.signal}),api.get('/admin/v2/content/categories',{signal:controller.signal})])
-      .then(([m,c])=>{setMeta(m.data.data);setCategories(c.data.data.filter(item=>item.activo));})
+      .then(([m,c])=>{if(controller.signal.aborted)return;setMeta(m.data.data);setCategories(c.data.data.filter(item=>item.activo));})
       .catch(e=>{if(!controller.signal.aborted)setError(apiError(e));});
     return ()=>controller.abort();
   },[refresh]);
@@ -28,7 +28,7 @@ export default function StremcorePage() {
     const controller = new AbortController();
     setLoading(true);setError('');setCatalog(null);
     api.get(`${BASE}/${type}`,{params:{genre,page,q:search},signal:controller.signal})
-      .then(r=>setCatalog(r.data.data)).catch(e=>{if(!controller.signal.aborted)setError(apiError(e));})
+      .then(r=>{if(!controller.signal.aborted)setCatalog(r.data.data);}).catch(e=>{if(!controller.signal.aborted)setError(apiError(e));})
       .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return ()=>controller.abort();
   },[type,genre,page,search,refresh]);
@@ -38,6 +38,7 @@ export default function StremcorePage() {
     setDetail(null);setDetailError('');setManifest('');setMode('draft');setCategory('');setRating(0);
     setSeason(1);setSeasonInput('1');setSeasonData(null);setSeasonError('');setSelected(new Set());setUrls({});
     api.get(`${BASE}/${target.type}/${target.id}`,{signal:controller.signal}).then(r=>{
+      if(controller.signal.aborted)return;
       setDetail(r.data.data);setManifest(directUrl(r.data.data));
     }).catch(e=>{if(!controller.signal.aborted)setDetailError(apiError(e));});
     return ()=>controller.abort();
@@ -47,6 +48,7 @@ export default function StremcorePage() {
     const controller = new AbortController();
     setSeasonLoading(true);setSeasonError('');setSeasonData(null);setSelected(new Set());setUrls({});
     api.get(`${BASE}/series/${detail.id}/seasons/${season}`,{signal:controller.signal}).then(r=>{
+      if(controller.signal.aborted)return;
       setSeasonData(r.data.data);
       setUrls(Object.fromEntries(r.data.data.episodes.map(e=>[e.number,directUrl(e)])));
     }).catch(e=>{if(!controller.signal.aborted)setSeasonError(apiError(e));})
@@ -54,12 +56,14 @@ export default function StremcorePage() {
     return ()=>controller.abort();
   },[detail,season,seasonRefresh]);
 
-  const changeType = value => {setType(value);setGenre('all');setPage(1);setSearch('');setQuery('');};
+  const changeType = value => {if(value!==type){setCatalog(null);setLoading(true);}setType(value);setGenre('all');setPage(1);setSearch('');setQuery('');};
   const openItem = item => {setDetail(null);setDetailError('');setTarget({type,id:item.id});};
+  const loadSeason = () => {setSeasonData(null);setSelected(new Set());setUrls({});setSeasonLoading(true);setSeason(Number(seasonInput));setSeasonRefresh(value=>value+1);};
   const toggle = number => setSelected(current=>{const next=new Set(current);if(next.has(number))next.delete(number);else if(next.size<50)next.add(number);return next;});
   const importContent = async event => {
     event.preventDefault();
     if(!detail||!target||detail.id!==target.id||detail.type!==target.type)return;
+    if(detail.type==='series'&&selected.size>0&&(seasonLoading||seasonData?.seriesId!==detail.id||seasonData?.number!==season)){setDetailError('Espera a que termine de cargar la temporada seleccionada.');return;}
     setSaving(true);setDetailError('');
     try {
       const response = await api.post(BASE,{type:detail.type,id:detail.id,mode,categoryId:category||null,parentalRating:rating,
@@ -102,7 +106,7 @@ export default function StremcorePage() {
         {detail.existing&&<p className="strem-note">Esta {detail.type==='movies'?'película':'serie'} ya está en tu catálogo. Sus cambios se conservan. <AppLink to={detail.type==='movies'?'/catalogo':'/programacion'}>Editar o eliminar en el panel</AppLink>{detail.type==='series'?' · Puedes agregar episodios nuevos.':''}</p>}
         {!alreadyMovie&&<>
           {detail.type==='series'?<section className="strem-seasons">
-            <div className="strem-season-picker"><label>Temporada<input type="number" min={1} max={1000} value={seasonInput} onChange={event=>setSeasonInput(event.target.value)}/></label><button type="button" className="secondary-button" disabled={seasonLoading||!Number.isInteger(Number(seasonInput))||Number(seasonInput)<1||Number(seasonInput)>1000} onClick={()=>{setSeason(Number(seasonInput));setSeasonRefresh(value=>value+1);}}>Ver temporada</button></div>
+            <div className="strem-season-picker"><label>Temporada<input type="number" min={1} max={1000} value={seasonInput} onChange={event=>setSeasonInput(event.target.value)}/></label><button type="button" className="secondary-button" disabled={seasonLoading||!Number.isInteger(Number(seasonInput))||Number(seasonInput)<1||Number(seasonInput)>1000} onClick={loadSeason}>Ver temporada</button></div>
             {seasonError&&<p role="alert" className="alert alert--error">{seasonError} Puedes guardar la ficha de la serie sin episodios.</p>}
             {seasonLoading?<div className="loading-panel">Cargando episodios…</div>:seasonData&&<>
               <label className="strem-check"><input type="checkbox" disabled={!availableEpisodes.length} checked={selected.size>0&&selected.size===Math.min(50,availableEpisodes.length)} onChange={event=>setSelected(new Set(event.target.checked?availableEpisodes.slice(0,50).map(e=>e.number):[]))}/>Seleccionar todos los disponibles (máximo 50)</label>
