@@ -21,6 +21,7 @@ import {
 } from "../controllers/adminPayments.controller.js";
 import { listContent, createContent, updateContent, deleteContent, deleteContentBatch } from "../controllers/adminContent.controller.js";
 import { diagnoseChannels } from "../controllers/adminChannelHealth.controller.js";
+import { stremcoreControllers } from "../controllers/adminStremcore.controller.js";
 import {
   importCountryPlaylist,
   importParaguayPlaylist,
@@ -72,6 +73,11 @@ router.get("/content/import/iptv-org/countries", support, listIptvOrgCountries);
 router.get("/content/import/iptv-org/:countryCode/preview", support, previewCountryPlaylist);
 router.post("/content/import/iptv-org/:countryCode", support, importCountryPlaylist);
 router.get("/content/import/xtream/providers", support, listXtreamProviders);
+router.get("/content/import/stremcore/meta", support, stremcoreControllers.meta);
+router.get("/content/import/stremcore/series/:sourceId/seasons/:season", support, stremcoreControllers.season);
+router.get("/content/import/stremcore/:type/:sourceId", support, stremcoreControllers.detail);
+router.get("/content/import/stremcore/:type", support, stremcoreControllers.list);
+router.post("/content/import/stremcore", support, stremcoreControllers.import);
 router.post("/content/import/xtream/providers", support, createXtreamProvider);
 router.get("/content/import/xtream/providers/:providerId/streams", support, previewXtreamStreams);
 router.post("/content/import/xtream/providers/:providerId/import", support, importXtreamStreams);

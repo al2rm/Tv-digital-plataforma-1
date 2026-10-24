@@ -15,6 +15,7 @@ Plataforma propia para administrar clientes, suscripciones, pagos y una aplicaci
 - diagnóstico de formato/códec, selección manual HLS/TS e historial reciente en Android;
 - bloqueo de reproducción cuando la cuenta está desactivada o la suscripción está vencida;
 - compilación automática de la APK de prueba con GitHub Actions.
+- explorador Stremcore de películas, series y temporadas, con búsqueda, borradores e importación de fuentes directas; consulta [la guía de integración](docs/STREMCORE.md).
 
 ## Estructura
 
