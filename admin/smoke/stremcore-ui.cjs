@@ -58,6 +58,7 @@ async function main() {
     assert.equal(posts[0].mode,'draft');assert.equal(posts[0].manifestUrl,'');
     await page.getByRole('button',{name:'Ver ficha de Fuente directa de prueba',exact:true}).click();
     dialog=page.getByRole('dialog');
+    await dialog.getByRole('heading',{name:'Fuente directa de prueba',exact:true}).waitFor();
     await dialog.getByLabel('URL directa de la película').waitFor();
     assert.equal(await dialog.getByLabel('URL directa de la película').inputValue(),'https://8.8.8.8/demo.mp4');
     await dialog.getByLabel('Guardar contenido').selectOption('publish');

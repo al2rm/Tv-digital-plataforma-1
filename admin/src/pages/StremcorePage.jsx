@@ -55,9 +55,12 @@ export default function StremcorePage() {
   },[detail,season,seasonRefresh]);
 
   const changeType = value => {setType(value);setGenre('all');setPage(1);setSearch('');setQuery('');};
+  const openItem = item => {setDetail(null);setDetailError('');setTarget({type,id:item.id});};
   const toggle = number => setSelected(current=>{const next=new Set(current);if(next.has(number))next.delete(number);else if(next.size<50)next.add(number);return next;});
   const importContent = async event => {
-    event.preventDefault();setSaving(true);setDetailError('');
+    event.preventDefault();
+    if(!detail||!target||detail.id!==target.id||detail.type!==target.type)return;
+    setSaving(true);setDetailError('');
     try {
       const response = await api.post(BASE,{type:detail.type,id:detail.id,mode,categoryId:category||null,parentalRating:rating,
         ...(detail.type==='movies'?{manifestUrl:manifest}:{season,episodeNumbers:[...selected],episodeUrls:Object.fromEntries([...selected].map(number=>[number,urls[number]||'']))})});
@@ -68,6 +71,7 @@ export default function StremcorePage() {
   const availableEpisodes = seasonData?.episodes.filter(e=>!e.existing) || [];
   const publishingReady = detail?.type==='movies'?Boolean(manifest.trim()):selected.size>0&&[...selected].every(number=>urls[number]?.trim());
   const alreadyMovie = detail?.type==='movies'&&Boolean(detail.existing);
+  const detailReady = Boolean(detail&&target&&detail.id===target.id&&detail.type===target.type);
 
   return <>
     <PageHeader eyebrow="Fuentes del catálogo" title="Stremcore" description="Explora películas y series, revisa sus fuentes e importa lo que quieras administrar en TV Digital Pro."
@@ -83,16 +87,16 @@ export default function StremcorePage() {
     </form>
     <p className="strem-note">Las fichas pueden incluir páginas de reproductores externos. Para ver un título en la app necesitas una fuente directa compatible. Puedes importar su información como borrador y configurarla después.</p>
     {loading?<div role="status" className="loading-panel">{search?'Buscando títulos en Stremcore…':'Cargando catálogo de Stremcore…'}</div>:<>
-      {catalog?.items.length?<div className="strem-grid">{catalog.items.map(item=><button key={item.id} className="strem-card" onClick={()=>setTarget({type,id:item.id})} aria-label={`Ver ficha de ${item.title}`}>
+      {catalog?.items.length?<div className="strem-grid">{catalog.items.map(item=><button key={item.id} className="strem-card" onClick={()=>openItem(item)} aria-label={`Ver ficha de ${item.title}`}>
         <div className="strem-poster">{item.poster?<img src={item.poster} alt="" loading="lazy" referrerPolicy="no-referrer"/>:<Film size={40}/>}</div>
         <div className="strem-card-info"><strong>{item.title}</strong><small>{item.date?.slice(0,4)||'Sin año'}{item.rating?` · ★ ${item.rating}`:''}</small>{item.existing&&<span className="status-pill status-pill--muted">{item.existing.activo?'Ya publicado':'Borrador importado'}</span>}</div>
       </button>)}</div>:!error&&<div className="empty-inline">No se encontraron títulos. Prueba otra búsqueda o género.</div>}
       {catalog&&<nav className="strem-pagination" aria-label="Páginas de Stremcore"><button className="secondary-button" disabled={page<=1} onClick={()=>setPage(value=>value-1)}><ChevronLeft size={18}/>Anterior</button><span>Página {catalog.page} de {catalog.totalPages} · {catalog.total.toLocaleString('es-PY')} resultados</span><button className="secondary-button" disabled={page>=catalog.totalPages} onClick={()=>setPage(value=>value+1)}>Siguiente<ChevronRight size={18}/></button></nav>}
       {catalog?.truncated&&<p className="strem-note">Se muestran los primeros 500 resultados. Escribe un título más concreto para afinar la búsqueda.</p>}
     </>}
-    {target&&<Modal wide title={detail?.title||'Ficha de Stremcore'} onClose={()=>!saving&&setTarget(null)}>
+    {target&&<Modal wide title={detailReady?detail.title:'Ficha de Stremcore'} onClose={()=>!saving&&setTarget(null)}>
       {detailError&&<div role="alert" className="alert alert--error">{detailError}</div>}
-      {!detail?!detailError&&<div className="loading-panel">Cargando ficha…</div>:<form onSubmit={importContent}>
+      {!detailReady?!detailError&&<div className="loading-panel">Cargando ficha…</div>:<form onSubmit={importContent}>
         <div className="strem-detail">{detail.poster&&<img src={detail.poster} alt="" referrerPolicy="no-referrer"/>}<div><p>{detail.overview||'Sin descripción disponible.'}</p><small>{detail.date?.slice(0,4)}{detail.runtime?` · ${detail.runtime} min`:''}</small></div></div>
         {detail.type==='movies'&&<ServerList servers={detail.servers} onSelect={setManifest}/>}
         {detail.existing&&<p className="strem-note">Esta {detail.type==='movies'?'película':'serie'} ya está en tu catálogo. Sus cambios se conservan. <AppLink to={detail.type==='movies'?'/catalogo':'/programacion'}>Editar o eliminar en el panel</AppLink>{detail.type==='series'?' · Puedes agregar episodios nuevos.':''}</p>}
