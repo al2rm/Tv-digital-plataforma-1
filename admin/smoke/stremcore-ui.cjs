@@ -47,6 +47,8 @@ async function main() {
     });
     await page.goto(origin+'/stremcore');
     await page.getByRole('button',{name:'Ver ficha de Viaje de prueba',exact:true}).waitFor();
+    await page.locator('.strem-poster img').evaluateAll(images=>Promise.all(images.map(async image=>{image.loading='eager';await image.decode();})));
+    assert.equal(await page.locator('.strem-poster img').first().evaluate(image=>image.naturalWidth>0&&image.getBoundingClientRect().height>100),true,'La portada debe cargarse y ocupar el espacio reservado');
     await page.screenshot({path:'admin/ui-reports/stremcore-desktop.png',fullPage:true});
     await page.getByRole('button',{name:'Ver ficha de Viaje de prueba',exact:true}).click();
     let dialog=page.getByRole('dialog');
@@ -78,6 +80,7 @@ async function main() {
     await page.setViewportSize({width:390,height:844});
     await page.getByRole('button',{name:'Películas (2)',exact:true}).click();
     await page.getByRole('button',{name:'Ver ficha de Viaje de prueba',exact:true}).waitFor();
+    await page.locator('.strem-poster img').evaluateAll(images=>Promise.all(images.map(async image=>{image.loading='eager';await image.decode();})));
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),true,'La página móvil no debe tener desplazamiento horizontal');
     await page.screenshot({path:'admin/ui-reports/stremcore-mobile.png',fullPage:true});
     assert.equal(unexpectedRequests,0,'No deben abrirse reproductores externos');assert.deepEqual(errors,[]);
